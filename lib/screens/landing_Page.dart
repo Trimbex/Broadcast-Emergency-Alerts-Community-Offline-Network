@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'network_dashboard.dart'; // make sure this import is correct
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -8,9 +9,7 @@ class LandingPage extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          
-        color : Color(0xFF898AC4), 
-          
+          color: Color(0xFF898AC4),
         ),
         child: SafeArea(
           child: Center(
@@ -34,7 +33,7 @@ class LandingPage extends StatelessWidget {
                   child: const Icon(
                     Icons.emergency_outlined,
                     size: 100,
-                    color: Color(0xFFFF5F6D), 
+                    color: Color(0xFFFF5F6D),
                   ),
                 ),
 
@@ -75,6 +74,37 @@ class LandingPage extends StatelessWidget {
                 ),
 
                 const SizedBox(height: 80),
+
+                // Start Button
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const NetworkDashboard(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF5F6D),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 50, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    elevation: 8,
+                    shadowColor: Colors.black45,
+                  ),
+                  child: const Text(
+                    'Start',
+                    style: TextStyle(
+                      fontSize: 20,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

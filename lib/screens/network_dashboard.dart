@@ -10,9 +10,10 @@ class NetworkDashboard extends StatefulWidget {
 }
 
 class _NetworkDashboardState extends State<NetworkDashboard> {
+  final Color primaryColor = const Color(0xFF898AC4);
   String _selectedRange = '1 km';
   final List<String> _ranges = ['500 m', '1 km', '5 km', '10 km'];
-  
+
   // Mock data for connected devices
   final List<DeviceModel> _connectedDevices = [
     DeviceModel(
@@ -55,119 +56,137 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final mode = args?['mode'] ?? 'join';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(mode == 'join' ? 'Emergency Network' : 'Your Network'),
+        backgroundColor: primaryColor,
+        title: Text(
+          mode == 'join' ? 'Emergency Network' : 'Your Network',
+          style: const TextStyle(color: Colors.white),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              setState(() {
-                // Refresh device list
-              });
-            },
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: () => setState(() {}),
           ),
           IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              _showRangeSettings();
-            },
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: _showRangeSettings,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Network Status Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatusItem(
-                  icon: Icons.wifi,
-                  label: 'Range',
-                  value: _selectedRange,
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: Colors.grey[300],
-                ),
-                _buildStatusItem(
-                  icon: Icons.people,
-                  label: 'Connected',
-                  value: '${_connectedDevices.length}',
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: Colors.grey[300],
-                ),
-                _buildStatusItem(
-                  icon: Icons.signal_cellular_alt,
-                  label: 'Signal',
-                  value: 'Strong',
-                ),
-              ],
-            ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF898AC4), Color(0xFFD1C4E9)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-          
-          // Quick Actions
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showQuickMessageDialog,
-                    icon: const Icon(Icons.message),
-                    label: const Text('Quick Message'),
+        ),
+        child: Column(
+          children: [
+            // Header with stats
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.pushNamed(context, '/resources'),
-                    icon: const Icon(Icons.inventory),
-                    label: const Text('Resources'),
+                ],
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatusItem(
+                    icon: Icons.wifi,
+                    label: 'Range',
+                    value: _selectedRange,
                   ),
-                ),
-              ],
+                  Container(width: 1, height: 40, color: Colors.grey[300]),
+                  _buildStatusItem(
+                    icon: Icons.people,
+                    label: 'Connected',
+                    value: '${_connectedDevices.length}',
+                  ),
+                  Container(width: 1, height: 40, color: Colors.grey[300]),
+                  _buildStatusItem(
+                    icon: Icons.signal_cellular_alt,
+                    label: 'Signal',
+                    value: 'Strong',
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Connected Devices List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _connectedDevices.length,
-              itemBuilder: (context, index) {
-                final device = _connectedDevices[index];
-                return _buildDeviceCard(device);
-              },
+            // Quick actions
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _showQuickMessageDialog,
+                      icon: const Icon(Icons.message),
+                      label: const Text('Quick Message'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => Navigator.pushNamed(context, '/resources'),
+                      icon: const Icon(Icons.inventory),
+                      label: const Text('Resources'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryColor,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          // Voice Command Button
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: VoiceCommandButton(),
-          ),
-        ],
+            // Devices list or empty message
+            Expanded(
+              child: _connectedDevices.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No connected devices yet',
+                        style: TextStyle(color: Colors.white70, fontSize: 16),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: _connectedDevices.length,
+                      itemBuilder: (context, index) {
+                        return _buildDeviceCard(_connectedDevices[index]);
+                      },
+                    ),
+            ),
+
+            // Voice button
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: VoiceCommandButton(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -179,24 +198,20 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   }) {
     return Column(
       children: [
-        Icon(icon, size: 24, color: const Color(0xFF1976D2)),
+        Icon(icon, size: 24, color: primaryColor),
         const SizedBox(height: 6),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1976D2),
+            color: primaryColor,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-            color: Colors.grey[600],
-          ),
+          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
         ),
       ],
     );
@@ -205,16 +220,19 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   Widget _buildDeviceCard(DeviceModel device) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
+            // Avatar box
             Container(
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                gradient: LinearGradient(
+                  colors: [primaryColor, const Color(0xFFB5B6E0)],
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -230,6 +248,8 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
               ),
             ),
             const SizedBox(width: 16),
+
+            // Device info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,14 +264,13 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
+                      Icon(Icons.location_on,
+                          size: 14, color: Colors.grey[500]),
                       const SizedBox(width: 4),
                       Text(
                         device.distance,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
+                        style:
+                            TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                       const SizedBox(width: 12),
                       Container(
@@ -265,38 +284,35 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                       const SizedBox(width: 4),
                       Text(
                         device.status,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey[600],
-                        ),
+                        style:
+                            TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                     ],
                   ),
                 ],
               ),
             ),
+
+            // Battery + Chat
             Column(
               children: [
                 Icon(
                   Icons.battery_std,
-                  color: device.batteryLevel > 50 
-                      ? const Color(0xFF4CAF50) 
+                  color: device.batteryLevel > 50
+                      ? const Color(0xFF4CAF50)
                       : const Color(0xFFFF9800),
                   size: 20,
                 ),
                 Text(
                   '${device.batteryLevel}%',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey[600],
-                  ),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                 ),
               ],
             ),
             const SizedBox(width: 12),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF1976D2),
+                color: primaryColor,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: IconButton(
@@ -326,24 +342,16 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: _ranges.map((range) {
-            return             ListTile(
+            return ListTile(
               title: Text(range),
               leading: Radio<String>(
                 value: range,
                 groupValue: _selectedRange,
                 onChanged: (value) {
-                  setState(() {
-                    _selectedRange = value!;
-                  });
+                  setState(() => _selectedRange = value!);
                   Navigator.pop(context);
                 },
               ),
-              onTap: () {
-                setState(() {
-                  _selectedRange = range;
-                });
-                Navigator.pop(context);
-              },
             );
           }).toList(),
         ),
@@ -377,4 +385,3 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     );
   }
 }
-
