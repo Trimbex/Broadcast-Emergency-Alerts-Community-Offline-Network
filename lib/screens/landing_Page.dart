@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'network_dashboard.dart'; // make sure this import is correct
+import 'network_dashboard.dart'; 
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -9,19 +9,19 @@ class LandingPage extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF898AC4),
+          color: Color(0xFF898AC4), 
         ),
         child: SafeArea(
           child: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo Circle 
+                // Logo Circle
                 Container(
                   padding: const EdgeInsets.all(36),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white, // solid white
+                    color: Colors.white,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.15),
@@ -75,34 +75,76 @@ class LandingPage extends StatelessWidget {
 
                 const SizedBox(height: 80),
 
-                // Start Button
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const NetworkDashboard(),
+                // Action Buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    children: [
+                      // Join Existing Communication Button
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          // TODO: Add logic for joining an existing network
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const NetworkDashboard(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.group_add_outlined, color: Colors.white),
+                        label: const Text(
+                          'Join Existing Communication',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF5F6D),
+                          minimumSize: const Size(double.infinity, 55),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 8,
+                          shadowColor: Colors.black45,
+                        ),
                       ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFFF5F6D),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 50, vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    elevation: 8,
-                    shadowColor: Colors.black45,
-                  ),
-                  child: const Text(
-                    'Start',
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 1.5,
-                    ),
+
+                      const SizedBox(height: 20),
+
+                      // Start New Communication Button
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          // TODO: Add logic for starting a new communication session
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const NetworkDashboard(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.wifi_tethering_outlined, color: Colors.white),
+                        label: const Text(
+                          'Start New Communication',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFFFF5F6D),
+                          minimumSize: const Size(double.infinity, 55),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 8,
+                          shadowColor: Colors.black45,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
