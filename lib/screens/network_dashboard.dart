@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/device_model.dart';
 import 'resource_sharing_page.dart';
+import 'chat_page.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -321,10 +322,14 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 color: Colors.white,
                 iconSize: 20,
                 onPressed: () {
-                  Navigator.pushNamed(
+                  Navigator.push(
                     context,
-                    '/chat',
-                    arguments: {'device': device},
+                    MaterialPageRoute(
+                      builder: (context) => const ChatPage(),
+                      settings: RouteSettings(
+                        arguments: {'device': device},
+                      ),
+                    ),
                   );
                 },
               ),
