@@ -13,4 +13,3 @@ class MessageModel {
     required this.isMe,
   });
 }
-
