@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/voice_command_button.dart';
 
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
@@ -6,172 +7,205 @@ class LandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          
-        color : Color(0xFF898AC4), 
-          
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo Circle 
-                Container(
-                  padding: const EdgeInsets.all(36),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white, // solid white
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+      backgroundColor: const Color(0xFF898AC4),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(height: 20),
+
+              // Logo Circle
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFFFFF), Color(0xFFF3F3F3)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  child: const Icon(
-                    Icons.emergency_outlined,
-                    size: 100,
-                    color: Color(0xFFFF5F6D), 
-                  ),
-                ),
-
-                const SizedBox(height: 50),
-
-                // Title
-                const Text(
-                  'BEACON',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 54,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: 10,
-                    fontFamily: 'Montserrat',
-                    shadows: [
-                      Shadow(
-                        color: Colors.black54,
-                        offset: Offset(0, 3),
-                        blurRadius: 8,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // Subtitle
-                const Text(
-                  'Emergency Communication Network',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-
-                const SizedBox(height: 80),
-
-
-                Column(
-                  children: [
-                    _buildActionButton(
-                      context,
-                      icon: Icons.group_add,
-                      label: 'Join Emergency Communication',
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/network-dashboard',
-                          arguments: {'mode': 'join'},
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height:20),
-                    _buildActionButton(
-                      context,
-                      icon: Icons.emergency_share,
-                      label: 'Initiate New Communication',
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          '/network-dashboard',
-                          arguments: {'mode': 'initiate'},
-                        );
-                      },
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
-              ],
-            ),
+                child: const Icon(
+                  Icons.emergency_outlined,
+                  size: 80,
+                  color: Color(0xFFFF5F6D),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Title
+              const Text(
+                'BEACON',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 40,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: 4,
+                ),
+              ),
+
+              const SizedBox(height: 6),
+
+              // Subtitle
+              const Text(
+                'Emergency Communication Network',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 0.8,
+                ),
+              ),
+
+              const SizedBox(height: 40),
+
+              // Action Buttons
+              _buildActionButton(
+                context,
+                icon: Icons.group_add,
+                label: 'Join Communication',
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/network-dashboard',
+                    arguments: {'mode': 'join'},
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              _buildActionButton(
+                context,
+                icon: Icons.emergency_share,
+                label: 'Start New Communication',
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/network-dashboard',
+                    arguments: {'mode': 'initiate'},
+                  );
+                },
+              ),
+
+              const SizedBox(height: 36),
+
+              // Quick Access Icons
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildQuickAccessIcon(
+                    context,
+                    icon: Icons.inventory,
+                    label: 'Resources',
+                    onTap: () => Navigator.pushNamed(context, '/resources'),
+                  ),
+                  _buildQuickAccessIcon(
+                    context,
+                    icon: Icons.person,
+                    label: 'Profile',
+                    onTap: () => Navigator.pushNamed(context, '/profile'),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 40),
+
+              // Voice Command Button
+              const VoiceCommandButton(),
+
+              const SizedBox(height: 20),
+            ],
           ),
         ),
       ),
     );
-  
   }
 
-  Widget _buildActionButton(
+  // --- Modern Action Button ---
+  static Widget _buildActionButton(
     BuildContext context, {
     required IconData icon,
     required String label,
     required VoidCallback onPressed,
   }) {
-    return Container(
+    return SizedBox(
       width: double.infinity,
-      height: 64,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+      height: 54,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 22),
+        label: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            fontFamily: 'Poppins',
           ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 28,
-                  color: const Color(0xFF1976D2),
-                ),
-                const SizedBox(width: 16),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF1976D2),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ],
-            ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF1976D2),
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(35),
           ),
+          shadowColor: Colors.black.withOpacity(0.2),
         ),
       ),
     );
   }
 
+  // --- Compact Quick Access Icon ---
+  static Widget _buildQuickAccessIcon(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.9),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, size: 28, color: const Color(0xFF1976D2)),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontFamily: 'Poppins',
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
-
-
-  
