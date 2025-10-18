@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/device_model.dart';
+import 'resource_sharing_page.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -149,7 +150,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/resources'),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ResourceSharingPage())),
                       icon: const Icon(Icons.inventory),
                       label: const Text('Resources'),
                       style: ElevatedButton.styleFrom(
