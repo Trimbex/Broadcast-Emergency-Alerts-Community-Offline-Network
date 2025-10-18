@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/voice_command_button.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 
@@ -11,6 +10,7 @@ class ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<ChatPage> {
+  final TextEditingController _messageController = TextEditingController();
   final List<MessageModel> _messages = [
     MessageModel(
       id: '1',
@@ -36,6 +36,12 @@ class _ChatPageState extends State<ChatPage> {
   ];
 
   @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final device = args?['device'] as DeviceModel?;
@@ -55,7 +61,7 @@ class _ChatPageState extends State<ChatPage> {
               ),
               child: Center(
                 child: Text(
-                  device?.name[0] ?? 'U',
+                  device?.name?[0] ?? 'U',
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
@@ -113,14 +119,78 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _messages.length,
-        itemBuilder: (context, index) {
-          return _buildMessageBubble(_messages[index]);
-        },
+      body: Column(
+        children: [
+          // Messages List
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                return _buildMessageBubble(_messages[index]);
+              },
+            ),
+          ),
+
+          // Message Input Area
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withValues(alpha: 0.2),
+                  spreadRadius: 1,
+                  blurRadius: 5,
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: 'Type a message...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                FloatingActionButton(
+                  mini: true,
+                  onPressed: _sendMessage,
+                  child: const Icon(Icons.send),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  void _sendMessage() {
+    if (_messageController.text.trim().isEmpty) return;
+
+    setState(() {
+      _messages.add(
+        MessageModel(
+          id: DateTime.now().toString(),
+          senderId: 'me',
+          text: _messageController.text,
+          timestamp: DateTime.now(),
+          isMe: true,
+        ),
+      );
+      _messageController.clear();
+    });
   }
 
   Widget _buildMessageBubble(MessageModel message) {
