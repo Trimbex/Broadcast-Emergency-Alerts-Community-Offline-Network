@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/voice_command_button.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 
@@ -61,7 +62,7 @@ class _ChatPageState extends State<ChatPage> {
               ),
               child: Center(
                 child: Text(
-                  device?.name?[0] ?? 'U',
+                  (device?.name ?? 'U')[0],
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w500,
@@ -132,6 +133,25 @@ class _ChatPageState extends State<ChatPage> {
             ),
           ),
 
+          // Quick Actions Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                top: BorderSide(color: Colors.grey[200]!),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildQuickActionChip('SOS', Icons.emergency),
+                _buildQuickActionChip('Location', Icons.location_on),
+                _buildQuickActionChip('Safe', Icons.check_circle),
+              ],
+            ),
+          ),
+
           // Message Input Area
           Container(
             padding: const EdgeInsets.all(16),
@@ -162,6 +182,8 @@ class _ChatPageState extends State<ChatPage> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                const VoiceCommandButton(isCompact: true),
                 const SizedBox(width: 8),
                 FloatingActionButton(
                   mini: true,
@@ -228,6 +250,48 @@ class _ChatPageState extends State<ChatPage> {
               style: TextStyle(
                 color: message.isMe ? Colors.white.withValues(alpha: 0.8) : Colors.black54,
                 fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionChip(String label, IconData icon) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _messages.add(
+            MessageModel(
+              id: DateTime.now().toString(),
+              senderId: 'me',
+              text: label,
+              timestamp: DateTime.now(),
+              isMe: true,
+            ),
+          );
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1976D2).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: const Color(0xFF1976D2).withValues(alpha: 0.3),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: const Color(0xFF1976D2)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF1976D2),
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
