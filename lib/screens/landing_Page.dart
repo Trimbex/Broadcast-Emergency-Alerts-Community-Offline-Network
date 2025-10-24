@@ -81,7 +81,7 @@ class LandingPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.pushNamed(
                     context,
-                    '/network-dashboard',
+                    '/network_dashboard',
                     arguments: {'mode': 'join'},
                   );
                 },
@@ -94,7 +94,7 @@ class LandingPage extends StatelessWidget {
                 onPressed: () {
                   Navigator.pushNamed(
                     context,
-                    '/network-dashboard',
+                    '/network_dashboard',
                     arguments: {'mode': 'initiate'},
                   );
                 },

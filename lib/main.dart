@@ -3,6 +3,7 @@ import 'screens/landing_Page.dart';
 import 'screens/identity_setup_page.dart';
 import 'screens/resource_sharing_page.dart';
 import 'screens/profile_page.dart';
+import 'screens/network_dashboard.dart';
 void main() {
   runApp(const MyApp());
 }
@@ -25,6 +26,7 @@ class MyApp extends StatelessWidget {
         '/landing': (context) => const LandingPage(),
         '/resources': (context) =>  ResourceSharingPage(),
         '/profile': (context) => const ProfilePage(),
+        '/network_dashboard': (context) => const NetworkDashboard(),
 
       },
     );
