@@ -6,8 +6,8 @@ plugins {
 }
 
 android {
-    namespace = "com.example.flutter_application"
-    compileSdk = flutter.compileSdkVersion
+    namespace = "com.example.beacon_network"
+    compileSdk = 34  // Latest stable API level
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -21,10 +21,10 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.flutter_application"
+        applicationId = "com.example.beacon_network"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 21  // Required for WiFi Direct and modern Android features
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

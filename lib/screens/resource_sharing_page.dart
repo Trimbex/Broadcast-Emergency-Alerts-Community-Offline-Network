@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/resource_model.dart';
+import '../providers/app_state_provider.dart';
 
 class ResourceSharingPage extends StatefulWidget {
   const ResourceSharingPage({super.key});
@@ -12,60 +15,23 @@ class ResourceSharingPage extends StatefulWidget {
 class _ResourceSharingPageState extends State<ResourceSharingPage> {
   String _selectedCategory = 'All';
   final List<String> _categories = ['All', 'Medical', 'Food', 'Shelter', 'Water', 'Other'];
-
-  final List<ResourceModel> _resources = [
-    ResourceModel(
-      id: '1',
-      name: 'First Aid Kit',
-      category: 'Medical',
-      quantity: 5,
-      location: 'Community Center - 0.5 km',
-      provider: 'Sarah Johnson',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '2',
-      name: 'Bottled Water (24-pack)',
-      category: 'Water',
-      quantity: 12,
-      location: 'Emergency Shelter - 1.2 km',
-      provider: 'Emergency Center',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '3',
-      name: 'Emergency Shelter Space',
-      category: 'Shelter',
-      quantity: 20,
-      location: 'High School Gym - 2.0 km',
-      provider: 'Emergency Center',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '4',
-      name: 'Canned Food',
-      category: 'Food',
-      quantity: 30,
-      location: 'Relief Center - 1.5 km',
-      provider: 'Mike Chen',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '5',
-      name: 'Blankets',
-      category: 'Shelter',
-      quantity: 15,
-      location: 'Community Hall - 0.8 km',
-      provider: 'Lisa Rodriguez',
-      status: 'Limited',
-    ),
-  ];
+  final Uuid _uuid = const Uuid();
 
   @override
   Widget build(BuildContext context) {
-    final filteredResources = _selectedCategory == 'All'
-        ? _resources
-        : _resources.where((r) => r.category == _selectedCategory).toList();
+    return Consumer<AppStateProvider>(
+      builder: (context, appState, child) {
+        final allResources = appState.resources;
+        final filteredResources = _selectedCategory == 'All'
+            ? allResources
+            : allResources.where((r) => r.category == _selectedCategory).toList();
+
+        return _buildContent(context, appState, filteredResources);
+      },
+    );
+  }
+
+  Widget _buildContent(BuildContext context, AppStateProvider appState, List<ResourceModel> filteredResources) {
 
     return Scaffold(
       appBar: AppBar(
@@ -195,6 +161,41 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 const VoiceCommandButton(isCompact: true),
               ],
             ),
+          ),
+        ],
+      ),
+      floatingActionButton: appState.isConnected
+          ? FloatingActionButton.extended(
+              onPressed: () => _showConnectionInfo(context, appState),
+              icon: const Icon(Icons.wifi),
+              label: Text(appState.connectionStatus),
+              backgroundColor: Colors.green,
+            )
+          : null,
+    );
+  }
+
+  void _showConnectionInfo(BuildContext context, AppStateProvider appState) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Connection Info'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Status: ${appState.connectionStatus}'),
+            const SizedBox(height: 8),
+            Text('Connected Devices: ${appState.connectedDevices.length}'),
+            const SizedBox(height: 8),
+            if (appState.connectionInfo?.groupOwnerAddress != null)
+              Text('Host IP: ${appState.connectionInfo!.groupOwnerAddress}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -386,6 +387,8 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   }
 
   void _requestResource(ResourceModel resource) {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -397,14 +400,29 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Request sent for ${resource.name}'),
-                  backgroundColor: Colors.green,
-                ),
-              );
+              
+              if (appState.isConnected) {
+                await appState.requestResource(resource);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Request sent for ${resource.name} via P2P'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Not connected to any peer. Please connect first.'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Confirm'),
           ),
@@ -414,6 +432,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   }
 
   void _showAddResourceDialog() {
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
     final nameController = TextEditingController();
     final quantityController = TextEditingController();
     final locationController = TextEditingController();
@@ -421,75 +440,121 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Share a Resource'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Resource Name',
-                  border: OutlineInputBorder(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Share a Resource'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Resource Name',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Category',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _categories
+                      .where((c) => c != 'All')
+                      .map((category) => DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      selectedCategory = value!;
+                    });
+                  },
                 ),
-                items: _categories
-                    .where((c) => c != 'All')
-                    .map((category) => DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  selectedCategory = value!;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: quantityController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: quantityController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Quantity',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: locationController,
-                decoration: const InputDecoration(
-                  labelText: 'Location',
-                  border: OutlineInputBorder(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: locationController,
+                  decoration: const InputDecoration(
+                    labelText: 'Location',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text.isEmpty ||
+                    quantityController.text.isEmpty ||
+                    locationController.text.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please fill all fields'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
+                final resource = ResourceModel(
+                  id: _uuid.v4(),
+                  name: nameController.text,
+                  category: selectedCategory,
+                  quantity: int.tryParse(quantityController.text) ?? 1,
+                  location: locationController.text,
+                  provider: appState.currentUser?.name ?? 'You',
+                  providerId: appState.currentUser?.id,
+                  status: 'Available',
+                );
+
+                Navigator.pop(context);
+
+                // Add to database
+                await appState.addResource(resource);
+
+                // Share via P2P if connected
+                if (appState.isConnected) {
+                  await appState.shareResource(resource);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${resource.name} shared via P2P and saved locally'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('${resource.name} saved locally (not connected to P2P)'),
+                        backgroundColor: Colors.blue,
+                      ),
+                    );
+                  }
+                }
+              },
+              child: const Text('Share'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Resource shared successfully'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-            },
-            child: const Text('Share'),
-          ),
-        ],
       ),
     );
   }

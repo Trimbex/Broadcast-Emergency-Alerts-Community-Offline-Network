@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/device_model.dart';
+import '../providers/app_state_provider.dart';
 import 'resource_sharing_page.dart';
-import 'chat_page.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -15,38 +16,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   final Color primaryColor = const Color(0xFF898AC4);
   String _selectedRange = '1 km';
   final List<String> _ranges = ['500 m', '1 km', '5 km', '10 km'];
-
-  // Mock data for connected devices
-  final List<DeviceModel> _connectedDevices = [
-    DeviceModel(
-      id: '1',
-      name: 'Sarah Johnson',
-      status: 'Active',
-      distance: '0.3 km',
-      batteryLevel: 85,
-    ),
-    DeviceModel(
-      id: '2',
-      name: 'Mike Chen',
-      status: 'Active',
-      distance: '0.7 km',
-      batteryLevel: 60,
-    ),
-    DeviceModel(
-      id: '3',
-      name: 'Emergency Center',
-      status: 'Online',
-      distance: '2.1 km',
-      batteryLevel: 100,
-    ),
-    DeviceModel(
-      id: '4',
-      name: 'Lisa Rodriguez',
-      status: 'Active',
-      distance: '1.5 km',
-      batteryLevel: 45,
-    ),
-  ];
+  bool _isScanning = false;
 
   final List<String> _predefinedMessages = [
     'Need immediate help',
@@ -62,24 +32,41 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     final mode = args?['mode'] ?? 'join';
 
+    return Consumer<AppStateProvider>(
+      builder: (context, appState, child) {
+        final connectedDevices = appState.connectedDevices;
+        final discoveredPeers = appState.discoveredPeers;
+
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: primaryColor,
+            title: Text(
+              mode == 'join' ? 'Emergency Network' : 'Your Network',
+              style: const TextStyle(color: Colors.white),
+            ),
+            actions: [
+              IconButton(
+                icon: Icon(
+                  _isScanning ? Icons.stop : Icons.search,
+                  color: Colors.white,
+                ),
+                onPressed: () => _toggleDiscovery(appState),
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings, color: Colors.white),
+                onPressed: _showRangeSettings,
+              ),
+            ],
+          ),
+          body: _buildBody(context, appState, mode, connectedDevices, discoveredPeers),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context, AppStateProvider appState, String mode, 
+                     List<DeviceModel> connectedDevices, List discoveredPeers) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: primaryColor,
-        title: Text(
-          mode == 'join' ? 'Emergency Network' : 'Your Network',
-          style: const TextStyle(color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () => setState(() {}),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: _showRangeSettings,
-          ),
-        ],
-      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -113,20 +100,20 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 children: [
                   _buildStatusItem(
                     icon: Icons.wifi,
-                    label: 'Range',
-                    value: _selectedRange,
+                    label: 'Status',
+                    value: appState.connectionStatus,
                   ),
                   Container(width: 1, height: 40, color: Colors.grey[300]),
                   _buildStatusItem(
                     icon: Icons.people,
                     label: 'Connected',
-                    value: '${_connectedDevices.length}',
+                    value: '${connectedDevices.length}',
                   ),
                   Container(width: 1, height: 40, color: Colors.grey[300]),
                   _buildStatusItem(
-                    icon: Icons.signal_cellular_alt,
-                    label: 'Signal',
-                    value: 'Strong',
+                    icon: Icons.devices,
+                    label: 'Discovered',
+                    value: '${discoveredPeers.length}',
                   ),
                 ],
               ),
@@ -139,9 +126,9 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 children: [
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: _showQuickMessageDialog,
-                      icon: const Icon(Icons.message),
-                      label: const Text('Quick Message'),
+                      onPressed: () => _showNetworkActivities(appState),
+                      icon: const Icon(Icons.history),
+                      label: const Text('Activities'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: primaryColor,
                         foregroundColor: Colors.white,
@@ -151,7 +138,12 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ResourceSharingPage())),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ResourceSharingPage(),
+                        ),
+                      ),
                       icon: const Icon(Icons.inventory),
                       label: const Text('Resources'),
                       style: ElevatedButton.styleFrom(
@@ -164,23 +156,134 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
               ),
             ),
 
-            // Devices list or empty message
-            Expanded(
-              child: _connectedDevices.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No connected devices yet',
-                        style: TextStyle(color: Colors.white70, fontSize: 16),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _connectedDevices.length,
-                      itemBuilder: (context, index) {
-                        return _buildDeviceCard(_connectedDevices[index]);
-                      },
+            // Tab selector
+            if (discoveredPeers.isNotEmpty || connectedDevices.isNotEmpty)
+              DefaultTabController(
+                length: 2,
+                child: Column(
+                  children: [
+                    TabBar(
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white70,
+                      indicatorColor: Colors.white,
+                      tabs: const [
+                        Tab(text: 'Connected'),
+                        Tab(text: 'Discovered'),
+                      ],
                     ),
-            ),
+                    SizedBox(
+                      height: MediaQuery.of(context).size.height * 0.35,
+                      child: TabBarView(
+                        children: [
+                          // Connected devices
+                          connectedDevices.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    'No connected devices',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: connectedDevices.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildDeviceCard(
+                                      connectedDevices[index],
+                                      appState,
+                                    );
+                                  },
+                                ),
+                          // Discovered peers
+                          discoveredPeers.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Text(
+                                        'No devices discovered',
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ElevatedButton.icon(
+                                        onPressed: () => _toggleDiscovery(appState),
+                                        icon: const Icon(Icons.search),
+                                        label: const Text('Start Discovery'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.white,
+                                          foregroundColor: primaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.all(16),
+                                  itemCount: discoveredPeers.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildDiscoveredPeerCard(
+                                      discoveredPeers[index],
+                                      appState,
+                                    );
+                                  },
+                                ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.wifi_off,
+                        size: 64,
+                        color: Colors.white.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'No devices found',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Start discovery to find nearby devices',
+                        style: TextStyle(
+                          color: Colors.white60,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton.icon(
+                        onPressed: () => _toggleDiscovery(appState),
+                        icon: const Icon(Icons.search),
+                        label: const Text('Start Discovery'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: primaryColor,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 32,
+                            vertical: 16,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
             // Voice button
             const Padding(
@@ -219,7 +322,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     );
   }
 
-  Widget _buildDeviceCard(DeviceModel device) {
+  Widget _buildDeviceCard(DeviceModel device, AppStateProvider appState) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -266,28 +369,27 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(Icons.location_on,
-                          size: 14, color: Colors.grey[500]),
+                      Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
                       const SizedBox(width: 4),
                       Text(
-                        device.distance,
-                        style:
-                            TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        _formatLastSeen(device.lastSeen),
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                       const SizedBox(width: 12),
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4CAF50),
+                        decoration: BoxDecoration(
+                          color: device.isConnected
+                              ? const Color(0xFF4CAF50)
+                              : Colors.grey,
                           shape: BoxShape.circle,
                         ),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         device.status,
-                        style:
-                            TextStyle(fontSize: 13, color: Colors.grey[600]),
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                     ],
                   ),
@@ -295,49 +397,175 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
               ),
             ),
 
-            // Battery + Chat
-            Column(
-              children: [
-                Icon(
-                  Icons.battery_std,
-                  color: device.batteryLevel > 50
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFFFF9800),
-                  size: 20,
-                ),
-                Text(
-                  '${device.batteryLevel}%',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(width: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: primaryColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.chat_bubble_outline),
-                color: Colors.white,
-                iconSize: 20,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ChatPage(),
-                      settings: RouteSettings(
-                        arguments: {'device': device},
-                      ),
+            // Disconnect button
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.red),
+              onPressed: () async {
+                await appState.removeDevice(device.id);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('${device.name} removed'),
+                      backgroundColor: Colors.orange,
                     ),
                   );
-                },
-              ),
+                }
+              },
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildDiscoveredPeerCard(dynamic peer, AppStateProvider appState) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 4,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: primaryColor,
+          child: const Icon(Icons.phone_android, color: Colors.white),
+        ),
+        title: Text(
+          peer.deviceName,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text('Address: ${peer.deviceAddress}'),
+        trailing: ElevatedButton(
+          onPressed: () => _connectToPeer(peer, appState),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Connect'),
+        ),
+      ),
+    );
+  }
+
+  String _formatLastSeen(DateTime lastSeen) {
+    final now = DateTime.now();
+    final difference = now.difference(lastSeen);
+
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else {
+      return '${difference.inDays}d ago';
+    }
+  }
+
+  Future<void> _toggleDiscovery(AppStateProvider appState) async {
+    setState(() {
+      _isScanning = !_isScanning;
+    });
+
+    if (_isScanning) {
+      await appState.startDiscovery();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Discovering nearby devices...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } else {
+      await appState.stopDiscovery();
+    }
+  }
+
+  Future<void> _connectToPeer(dynamic peer, AppStateProvider appState) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Connecting...'),
+          ],
+        ),
+      ),
+    );
+
+    final success = await appState.connectToPeer(
+      peer.deviceAddress,
+      peer.deviceName,
+    );
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? 'Connected to ${peer.deviceName}'
+                : 'Failed to connect to ${peer.deviceName}',
+          ),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
+  void _showNetworkActivities(AppStateProvider appState) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Network Activities'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: appState.networkActivities.isEmpty
+              ? const Center(child: Text('No activities yet'))
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: appState.networkActivities.length,
+                  itemBuilder: (context, index) {
+                    final activity = appState.networkActivities[index];
+                    return ListTile(
+                      leading: Icon(_getActivityIcon(activity.activityType)),
+                      title: Text(activity.deviceName),
+                      subtitle: Text(activity.details ?? activity.activityType),
+                      trailing: Text(
+                        _formatLastSeen(activity.timestamp),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getActivityIcon(String activityType) {
+    switch (activityType) {
+      case 'connection':
+        return Icons.link;
+      case 'disconnection':
+        return Icons.link_off;
+      case 'resource_shared':
+        return Icons.share;
+      case 'resource_requested':
+        return Icons.request_page;
+      case 'message_sent':
+        return Icons.message;
+      default:
+        return Icons.circle;
+    }
   }
 
   void _showRangeSettings() {
@@ -365,29 +593,4 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     );
   }
 
-  void _showQuickMessageDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Send Quick Message'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _predefinedMessages.map((message) {
-            return ListTile(
-              title: Text(message),
-              onTap: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Sent: $message'),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              },
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
 }
