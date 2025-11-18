@@ -12,6 +12,11 @@
 .swiftpm/
 migrate_working_dir/
 
+# Memory dumps and heap files
+*.hprof
+*.heap
+*.bin
+
 # IntelliJ related
 *.iml
 *.ipr
