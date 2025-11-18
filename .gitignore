@@ -48,3 +48,31 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android/Gradle related (IMPORTANT - prevents large file issues)
+**/android/local.properties
+**/android/.gradle/
+**/android/captures/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/key.properties
+**/android/*.jks
+**/android/app/google-services.json
+**/android/build/
+**/android/.cxx/
+**/android/app/build/
+
+# Gradle files
+.gradle/
+gradle-wrapper.jar
+
+# iOS related (if ever needed)
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/**/DerivedData/
+**/ios/Flutter/App.framework
+**/ios/Flutter/flutter_*.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
