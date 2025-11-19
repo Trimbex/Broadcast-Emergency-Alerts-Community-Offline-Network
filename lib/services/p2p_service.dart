@@ -7,7 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:battery_plus/battery_plus.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
-
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 /// P2P Communication Service using Nearby Connections API
 /// 
 /// This service handles:
@@ -68,28 +70,40 @@ class P2PService extends ChangeNotifier {
   }
 
   /// Request necessary permissions for P2P communication
-  Future<bool> _requestPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.bluetooth,
-      Permission.bluetoothAdvertise,
-      Permission.bluetoothConnect,
-      Permission.bluetoothScan,
-      Permission.location,
-      Permission.locationWhenInUse,
-      Permission.nearbyWifiDevices,
-    ].request();
 
-    // Check if all critical permissions are granted
-    bool allGranted = statuses.values.every(
-      (status) => status.isGranted || status.isLimited,
-    );
+Future<bool> _requestPermissions() async {
+  List<Permission> permissions = [
+    Permission.bluetooth,
+    Permission.bluetoothAdvertise,
+    Permission.bluetoothConnect,
+    Permission.bluetoothScan,
+    Permission.location,
+    Permission.locationWhenInUse,
+  ];
 
-    if (!allGranted) {
-      debugPrint('❌ P2P: Some permissions denied: $statuses');
+  if (Platform.isAndroid) {
+    final deviceInfo = DeviceInfoPlugin();
+    final androidInfo = await deviceInfo.androidInfo;
+    final sdkInt = androidInfo.version.sdkInt;
+
+    // Request NEARBY_WIFI_DEVICES only on Android 13+ (SDK 33+)
+    if (sdkInt >= 33) {
+      permissions.add(Permission.nearbyWifiDevices);
     }
-
-    return allGranted;
   }
+
+  Map<Permission, PermissionStatus> statuses = await permissions.request();
+
+  bool allGranted = statuses.values.every(
+    (status) => status.isGranted || status.isLimited,
+  );
+
+  if (!allGranted) {
+    debugPrint('❌ P2P: Some permissions denied: $statuses');
+  }
+
+  return allGranted;
+}
 
   /// Start battery level monitoring
   void _startBatteryMonitoring() {
