@@ -19,18 +19,38 @@ class _ChatPageState extends State<ChatPage> {
   DeviceModel? _device;
   P2PService? _p2pService;
 
-  @override
-  void initState() {
-    super.initState();
-    // Wait for first frame to get arguments
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      if (args != null) {
-        _device = args['device'] as DeviceModel?;
-        _setupMessageStream();
+@override
+void initState() {
+  super.initState();
+
+  // Wait for widget to fully build before accessing context
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    if (args != null) {
+      _device = args['device'] as DeviceModel?;
+
+      // Initialize P2P service
+      _p2pService = Provider.of<P2PService>(context, listen: false);
+
+      if (_device?.endpointId != null) {
+        // 1️⃣ Load old messages from storage
+        _messages.addAll(_p2pService!.getMessageHistory(_device!.endpointId!));
+
+        // 2️⃣ Listen for new incoming messages
+        final stream = _p2pService!.getMessageStream(_device!.endpointId!);
+        stream?.listen((message) {
+          setState(() {
+            _messages.add(message);
+          });
+          _scrollToBottom();
+        });
       }
-    });
-  }
+
+      setState(() {}); // Refresh UI with loaded device & messages
+    }
+  });
+}
 
   void _setupMessageStream() {
     if (_device?.endpointId == null) return;

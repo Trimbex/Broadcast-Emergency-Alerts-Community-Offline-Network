@@ -33,6 +33,10 @@ class P2PService extends ChangeNotifier {
   // Connected devices
   final Map<String, DeviceModel> _connectedDevices = {};
   final Map<String, StreamController<MessageModel>> _messageStreams = {};
+
+  //mesasge history cashe 
+  final Map<String, List<MessageModel>> _messageHistory = {};
+
   
   // Connection state
   bool _isAdvertising = false;
@@ -394,9 +398,20 @@ Future<bool> _requestPermissions() async {
       senderName: data['senderName'],
     );
     
-    // Add to message stream
-    _messageStreams[endpointId]?.add(message);
+     // 1. Store history
+  _messageHistory.putIfAbsent(endpointId, () => []);
+  _messageHistory[endpointId]!.add(message);
+
+  // 2. Notify stream if chat open
+  _messageStreams[endpointId]?.add(message);
+
+  notifyListeners();
   }
+  // load message history for a specific device
+  List<MessageModel> getMessageHistory(String endpointId) {
+  return _messageHistory[endpointId] ?? [];
+}
+
 
   /// Handle emergency alert
   void _handleEmergencyAlert(String endpointId, Map<String, dynamic> data) {
