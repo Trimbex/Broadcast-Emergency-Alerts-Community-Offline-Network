@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../widgets/voice_command_button.dart';
-import '../widgets/theme_toggle_button.dart';
+import '../widgets/common/voice_command_button.dart';
+import '../widgets/common/theme_toggle_button.dart';
+import '../widgets/landing_page/welcome_header.dart';
+import '../widgets/landing_page/quick_access_card.dart';
+import '../widgets/landing_page/quick_stats_widget.dart';
 import '../theme/beacon_colors.dart';
 import '../services/database_service.dart';
-import '../services/p2p_service.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -50,10 +51,7 @@ class _LandingPageState extends State<LandingPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: const [
-          ThemeToggleButton(isCompact: true),
-          SizedBox(width: 8),
-        ],
+        actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
       ),
       floatingActionButton: const VoiceCommandButton(isCompact: false),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
@@ -68,7 +66,7 @@ class _LandingPageState extends State<LandingPage> {
                     const SizedBox(height: 16),
 
                     // Welcome Header
-                    _buildWelcomeHeader(),
+                    WelcomeHeader(userName: _userName),
 
                     const SizedBox(height: 32),
 
@@ -83,65 +81,13 @@ class _LandingPageState extends State<LandingPage> {
                     const SizedBox(height: 24),
 
                     // Quick Stats
-                    _buildQuickStats(),
+                    const QuickStatsWidget(),
 
                     const SizedBox(height: 32),
                   ],
                 ),
               ),
       ),
-    );
-  }
-
-  Widget _buildWelcomeHeader() {
-    return Row(
-      children: [
-        Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: BeaconColors.accentGradient(context),
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: BeaconColors.primary.withOpacity(0.3),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.emergency_outlined,
-            size: 32,
-            color: Colors.white,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _userName != null ? 'Welcome, $_userName!' : 'Welcome to BEACON',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Emergency Communication Network',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: BeaconColors.textSecondary(context),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -169,10 +115,7 @@ class _LandingPageState extends State<LandingPage> {
             SizedBox(width: 12),
             Text(
               'Join Communication Network',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -186,16 +129,15 @@ class _LandingPageState extends State<LandingPage> {
       children: [
         Text(
           'Quick Access',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
-              child: _buildQuickAccessCard(
-                context,
+              child: QuickAccessCard(
                 icon: Icons.person,
                 label: 'Profile',
                 color: BeaconColors.primary,
@@ -204,8 +146,7 @@ class _LandingPageState extends State<LandingPage> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _buildQuickAccessCard(
-                context,
+              child: QuickAccessCard(
                 icon: Icons.inventory_2,
                 label: 'Resources',
                 color: BeaconColors.secondary,
@@ -213,143 +154,6 @@ class _LandingPageState extends State<LandingPage> {
               ),
             ),
           ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickAccessCard(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        decoration: BoxDecoration(
-          color: BeaconColors.surface(context),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: BeaconColors.border(context),
-            width: 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                size: 28,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Flexible(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickStats() {
-    return Consumer<P2PService>(
-      builder: (context, p2pService, child) {
-        final connectedCount = p2pService.connectedDevices.length;
-        final isActive = p2pService.isAdvertising && p2pService.isDiscovering;
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: BeaconColors.surface(context),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: BeaconColors.border(context),
-              width: 1,
-            ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatItem(
-                icon: Icons.people_outline,
-                label: 'Connected',
-                value: '$connectedCount',
-                color: connectedCount > 0 ? BeaconColors.success : BeaconColors.textSecondary(context),
-              ),
-              Container(
-                width: 1,
-                height: 40,
-                color: BeaconColors.border(context),
-              ),
-              _buildStatItem(
-                icon: Icons.network_check,
-                label: 'Network',
-                value: isActive ? 'Active' : 'Inactive',
-                color: isActive ? BeaconColors.success : BeaconColors.warning,
-              ),
-              Container(
-                width: 1,
-                height: 40,
-                color: BeaconColors.border(context),
-              ),
-              _buildStatItem(
-                icon: Icons.battery_std,
-                label: 'Battery',
-                value: '${p2pService.batteryLevel}%',
-                color: p2pService.batteryLevel > 50 ? BeaconColors.success : BeaconColors.warning,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStatItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 20, color: color),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-          textAlign: TextAlign.center,
         ),
       ],
     );

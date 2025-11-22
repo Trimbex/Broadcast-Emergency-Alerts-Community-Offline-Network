@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/voice_command_button.dart';
-import '../widgets/theme_toggle_button.dart';
+import '../widgets/common/theme_toggle_button.dart';
+import '../widgets/profile_page/emergency_contact_card.dart';
 import '../theme/beacon_colors.dart';
 import '../services/theme_service.dart';
 import '../services/database_service.dart';
@@ -101,13 +101,7 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile & Emergency Contacts'),
-        actions: [
-          const ThemeToggleButton(isCompact: true),
-          IconButton(
-            icon: const Icon(Icons.save),
-            onPressed: _saveProfile,
-          ),
-        ],
+        actions: [ThemeToggleButton(isCompact: true), IconButton(icon: Icon(Icons.save), onPressed: _saveProfile)],
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -273,7 +267,12 @@ class _ProfilePageState extends State<ProfilePage> {
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: _emergencyContacts.length,
                     itemBuilder: (context, index) {
-                      return _buildContactCard(_emergencyContacts[index], index);
+                      final contact = _emergencyContacts[index];
+                      return EmergencyContactCard(
+                        contact: contact,
+                        onEdit: () => _editEmergencyContact(index),
+                        onDelete: () => _deleteEmergencyContact(index),
+                      );
                     },
                   ),
                 ],
@@ -341,85 +340,12 @@ class _ProfilePageState extends State<ProfilePage> {
               ),
             ),
 
-            // Voice Command Button
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: VoiceCommandButton(),
-            ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildContactCard(EmergencyContact contact, int index) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: BeaconColors.accentGradient(context),
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  contact.name[0],
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    contact.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    contact.relation,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    contact.phone,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.edit, size: 20),
-              color: BeaconColors.primary,
-              onPressed: () => _editEmergencyContact(index),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, size: 20),
-              color: BeaconColors.error,
-              onPressed: () => _deleteEmergencyContact(index),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _saveProfile() async {
     if (_nameController.text.trim().isEmpty) {

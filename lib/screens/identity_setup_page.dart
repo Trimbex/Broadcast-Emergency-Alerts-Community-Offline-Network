@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
-import '../widgets/theme_toggle_button.dart';
+import '../widgets/common/theme_toggle_button.dart';
 import '../theme/beacon_colors.dart';
 
 class IdentitySetupPage extends StatefulWidget {
@@ -47,16 +47,16 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
     }
 
     setState(() => _isSaving = true);
-    
+
     // Generate a persistent device ID
     final deviceId = DateTime.now().millisecondsSinceEpoch.toString();
-    
+
     await DatabaseService.instance.saveUserProfile(
       name: _nameController.text.trim(),
       deviceId: deviceId,
       role: _roleController.text.trim(),
     );
-    
+
     setState(() => _isSaving = false);
 
     if (mounted) {
@@ -71,10 +71,7 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: const [
-          ThemeToggleButton(isCompact: true),
-          SizedBox(width: 8),
-        ],
+        actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -115,9 +112,9 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
               Text(
                 'Set Up Your Identity',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  letterSpacing: 1.2,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineMedium?.copyWith(letterSpacing: 1.2),
               ),
 
               const SizedBox(height: 10),
@@ -164,9 +161,7 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
                           ),
                         )
                       : const Icon(Icons.check_circle_outline, size: 22),
-                  label: Text(
-                    _isSaving ? 'Saving...' : 'Save & Continue',
-                  ),
+                  label: Text(_isSaving ? 'Saving...' : 'Save & Continue'),
                 ),
               ),
 
@@ -194,7 +189,7 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
       controller: controller,
       style: Theme.of(context).textTheme.bodyMedium,
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: BeaconColors.textSecondary(context)) ,
+        prefixIcon: Icon(icon, color: BeaconColors.textSecondary(context)),
         labelText: label,
       ),
     );

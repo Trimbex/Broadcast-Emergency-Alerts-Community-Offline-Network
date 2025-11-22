@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/voice_command_button.dart';
-import '../widgets/theme_toggle_button.dart';
+import '../widgets/common/theme_toggle_button.dart';
+import '../widgets/common/voice_command_button.dart';
+import '../widgets/chat_page/message_bubble.dart';
+import '../widgets/chat_page/quick_action_chip.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 import '../services/p2p_service.dart';
@@ -21,52 +23,55 @@ class _ChatPageState extends State<ChatPage> {
   DeviceModel? _device;
   P2PService? _p2pService;
 
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-  // Wait for widget to fully build before accessing context
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _initializeChat();
-  });
-}
-
-void _initializeChat() {
-  final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-  if (args != null) {
-    _device = args['device'] as DeviceModel?;
-
-    // Initialize P2P service
-    _p2pService = Provider.of<P2PService>(context, listen: false);
-
-    if (_device?.endpointId != null) {
-      // 1️⃣ Load old messages from storage
-      // Use the comprehensive method that checks all possible IDs
-      final endpointId = _device!.endpointId!;
-      final deviceId = _device!.id;
-      
-      _messages.clear();
-      _messages.addAll(_p2pService!.getMessageHistoryForDevice(endpointId, deviceId));
-
-      // 2️⃣ Listen for new incoming messages
-      final stream = _p2pService!.getMessageStream(endpointId);
-      stream?.listen((message) {
-        // Check if message already exists (avoid duplicates)
-        if (!_messages.any((m) => m.id == message.id)) {
-          setState(() {
-            _messages.add(message);
-            // Keep sorted
-            _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-          });
-          _scrollToBottom();
-        }
-      });
-    }
-
-    setState(() {}); // Refresh UI with loaded device & messages
+    // Wait for widget to fully build before accessing context
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeChat();
+    });
   }
-}
+
+  void _initializeChat() {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    if (args != null) {
+      _device = args['device'] as DeviceModel?;
+
+      // Initialize P2P service
+      _p2pService = Provider.of<P2PService>(context, listen: false);
+
+      if (_device?.endpointId != null) {
+        // 1️⃣ Load old messages from storage
+        // Use the comprehensive method that checks all possible IDs
+        final endpointId = _device!.endpointId!;
+        final deviceId = _device!.id;
+
+        _messages.clear();
+        _messages.addAll(
+          _p2pService!.getMessageHistoryForDevice(endpointId, deviceId),
+        );
+
+        // 2️⃣ Listen for new incoming messages
+        final stream = _p2pService!.getMessageStream(endpointId);
+        stream?.listen((message) {
+          // Check if message already exists (avoid duplicates)
+          if (!_messages.any((m) => m.id == message.id)) {
+            setState(() {
+              _messages.add(message);
+              // Keep sorted
+              _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+            });
+            _scrollToBottom();
+          }
+        });
+      }
+
+      setState(() {}); // Refresh UI with loaded device & messages
+    }
+  }
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -79,7 +84,6 @@ void _initializeChat() {
       });
     }
   }
-
 
   @override
   void dispose() {
@@ -138,9 +142,9 @@ void _initializeChat() {
                 children: [
                   Text(
                     _device?.name ?? 'User',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Colors.white,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: Colors.white),
                   ),
                   Row(
                     children: [
@@ -196,7 +200,8 @@ void _initializeChat() {
           // Connection status banner
           Consumer<P2PService>(
             builder: (context, p2pService, child) {
-              final isConnected = _device?.endpointId != null &&
+              final isConnected =
+                  _device?.endpointId != null &&
                   p2pService.connectedDevices.any(
                     (d) => d.endpointId == _device!.endpointId,
                   );
@@ -253,7 +258,7 @@ void _initializeChat() {
                     padding: const EdgeInsets.all(16),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
-                      return _buildMessageBubble(_messages[index]);
+                      return MessageBubble(message: _messages[index]);
                     },
                   ),
           ),
@@ -270,9 +275,22 @@ void _initializeChat() {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildQuickActionChip('🚨 SOS', Icons.emergency, isEmergency: true),
-                _buildQuickActionChip('📍 Location', Icons.location_on),
-                _buildQuickActionChip('✅ Safe', Icons.check_circle),
+                QuickActionChip(
+                  label: '🚨 SOS',
+                  icon: Icons.emergency,
+                  isEmergency: true,
+                  onTap: () => _sendQuickMessage('🚨 SOS', true),
+                ),
+                QuickActionChip(
+                  label: '📍 Location',
+                  icon: Icons.location_on,
+                  onTap: () => _sendQuickMessage('📍 Location', false),
+                ),
+                QuickActionChip(
+                  label: '✅ Safe',
+                  icon: Icons.check_circle,
+                  onTap: () => _sendQuickMessage('✅ Safe', false),
+                ),
               ],
             ),
           ),
@@ -309,7 +327,7 @@ void _initializeChat() {
                   ),
                 ),
                 const SizedBox(width: 8),
-                const VoiceCommandButton(isCompact: true),
+                const VoiceCommandButton(isCompact: false),
                 const SizedBox(width: 8),
                 FloatingActionButton(
                   mini: true,
@@ -339,13 +357,15 @@ void _initializeChat() {
     // Send via P2P (this will store in history and notify stream)
     try {
       await p2pService.sendMessage(_device!.endpointId!, messageText);
-      
+
       // Reload messages from service to ensure we have the stored version
       final endpointId = _device!.endpointId!;
       final deviceId = _device!.id;
       setState(() {
         _messages.clear();
-        _messages.addAll(p2pService.getMessageHistoryForDevice(endpointId, deviceId));
+        _messages.addAll(
+          p2pService.getMessageHistoryForDevice(endpointId, deviceId),
+        );
       });
       _scrollToBottom();
     } catch (e) {
@@ -360,122 +380,6 @@ void _initializeChat() {
     }
   }
 
-  Widget _buildMessageBubble(MessageModel message) {
-    return Align(
-      alignment: message.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        decoration: BoxDecoration(
-          gradient: message.isMe
-              ? const LinearGradient(
-                  colors: BeaconColors.darkAccentGradient,
-                )
-              : null, 
-          color: message.isMe
-              ? null
-                        : (message.isEmergency ? BeaconColors.error.withOpacity(0.2) : BeaconColors.surface(context)),
-          borderRadius: BorderRadius.circular(20),
-          border: message.isEmergency
-              ? Border.all(color: BeaconColors.error, width: 2)
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!message.isMe && message.senderName != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child:                   Text(
-                    message.senderName!,
-                    style: TextStyle(
-                      color: message.isEmergency ? BeaconColors.error : BeaconColors.textSecondary(context),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-              ),
-            Text(
-              message.text,
-              style: TextStyle(
-                color: message.isMe
-                    ? Colors.white
-                    : (message.isEmergency ? BeaconColors.error : BeaconColors.textPrimary(context)),
-                fontSize: 15,
-                fontWeight: message.isEmergency ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                  Text(
-                    _formatTime(message.timestamp),
-                    style: TextStyle(
-                      color: message.isMe
-                          ? Colors.white.withOpacity(0.8)
-                          : BeaconColors.textSecondary(context),
-                      fontSize: 11,
-                    ),
-                  ),
-                if (message.isMe) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.done_all,
-                    size: 14,
-                    color: Colors.white.withValues(alpha: 0.8),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionChip(String label, IconData icon, {bool isEmergency = false}) {
-    return InkWell(
-      onTap: () => _sendQuickMessage(label, isEmergency),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isEmergency
-              ? BeaconColors.error.withOpacity(0.2)
-              : BeaconColors.primary.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isEmergency
-                ? BeaconColors.error
-                : BeaconColors.primary.withOpacity(0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isEmergency ? BeaconColors.error : BeaconColors.primary,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isEmergency ? BeaconColors.error : BeaconColors.primary,
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _sendQuickMessage(String message, bool isEmergency) async {
     if (_device?.endpointId == null) return;
 
@@ -488,15 +392,17 @@ void _initializeChat() {
       } else {
         await p2pService.sendMessage(_device!.endpointId!, message);
       }
-      
+
       // Reload messages from service to ensure we have the stored version
       // For emergency alerts, reload from all connected devices to show the broadcast
       final endpointId = _device!.endpointId!;
       final deviceId = _device!.id;
-      
+
       setState(() {
         _messages.clear();
-        _messages.addAll(p2pService.getMessageHistoryForDevice(endpointId, deviceId));
+        _messages.addAll(
+          p2pService.getMessageHistoryForDevice(endpointId, deviceId),
+        );
         // Sort by timestamp to ensure proper order
         _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
       });
@@ -549,20 +455,10 @@ void _initializeChat() {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
       ],
     );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

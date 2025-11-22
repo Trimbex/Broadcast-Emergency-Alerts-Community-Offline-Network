@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/beacon_colors.dart';
+import '../../theme/beacon_colors.dart';
 
 class VoiceCommandButton extends StatefulWidget {
   final bool isCompact;
