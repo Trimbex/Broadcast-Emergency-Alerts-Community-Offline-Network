@@ -86,32 +86,13 @@ class LandingPage extends StatelessWidget {
                   );
                 },
               ),
-              const SizedBox(height: 16),
-              _buildActionButton(
-                context,
-                icon: Icons.emergency_share,
-                label: 'Start New Communication',
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/network_dashboard',
-                    arguments: {'mode': 'initiate'},
-                  );
-                },
-              ),
 
               const SizedBox(height: 36),
 
               // Quick Access Icons
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _buildQuickAccessIcon(
-                    context,
-                    icon: Icons.inventory,
-                    label: 'Resources',
-                    onTap: () => Navigator.pushNamed(context, '/resources'),
-                  ),
                   _buildQuickAccessIcon(
                     context,
                     icon: Icons.person,

@@ -17,11 +17,9 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   String _selectedCategory = 'All';
   final List<String> _categories = ['All', 'Medical', 'Food', 'Shelter', 'Water', 'Other'];
   
-  // Local resources (created by this user)
-  final List<ResourceModel> _localResources = [];
-  
   // Stream subscription for network resources
   StreamSubscription<ResourceModel>? _resourceSubscription;
+  StreamSubscription<Map<String, dynamic>>? _resourceRequestSubscription;
   
   // Track which devices we're requesting resources from
   final Set<String> _requestingFromDevices = {};
@@ -39,11 +37,19 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         setState(() {});
       }
     });
+    
+    // Listen to resource requests
+    _resourceRequestSubscription = p2pService.resourceRequestStream.listen((requestData) {
+      if (mounted) {
+        _showResourceRequestDialog(requestData);
+      }
+    });
   }
 
   @override
   void dispose() {
     _resourceSubscription?.cancel();
+    _resourceRequestSubscription?.cancel();
     super.dispose();
   }
 
@@ -51,16 +57,13 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   Widget build(BuildContext context) {
     final p2pService = Provider.of<P2PService>(context);
     
-    // Combine local and network resources
-    final allResources = [
-      ..._localResources,
-      ...p2pService.networkResources,
-    ];
+    // Get all network resources (includes both local and remote)
+    final allResources = p2pService.networkResources;
     
     // Remove duplicates (same id and deviceId)
     final uniqueResources = <String, ResourceModel>{};
     for (var resource in allResources) {
-      final key = '${resource.id}_${resource.deviceId ?? "local"}';
+      final key = '${resource.id}_${resource.deviceId ?? "unknown"}';
       if (!uniqueResources.containsKey(key)) {
         uniqueResources[key] = resource;
       }
@@ -288,21 +291,46 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               ],
             ),
             const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              height: 44,
-              child: ElevatedButton(
-                onPressed: () => _requestResource(resource),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1976D2),
-                  foregroundColor: Colors.white,
+            // Only show request button if resource is not from current user
+            if (isFromNetwork && resource.status != 'Unavailable')
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: () => _requestResource(resource, p2pService),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1976D2),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text(
+                    'Request Resource',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
                 ),
-                child: const Text(
-                  'Request Resource',
-                  style: TextStyle(fontWeight: FontWeight.w500),
+              )
+            else if (!isFromNetwork)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.info_outline, size: 18, color: Colors.grey[600]),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Your Resource',
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -684,28 +712,208 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
     }
   }
 
-  void _requestResource(ResourceModel resource) {
+  void _requestResource(ResourceModel resource, P2PService p2pService) {
+    // Find the endpointId for this resource
+    String? endpointId;
+    if (resource.deviceId != null) {
+      for (var device in p2pService.connectedDevices) {
+        // Check both device.id and endpointId to match
+        if (device.id == resource.deviceId || device.endpointId == resource.deviceId) {
+          endpointId = device.endpointId;
+          break;
+        }
+      }
+    }
+    
+    if (endpointId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Device not found. Please ensure the device is connected.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
+    // If quantity > 1, show quantity selector
+    if (resource.quantity > 1) {
+      final quantityController = TextEditingController(text: '1');
+      
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Request Resource'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Resource: ${resource.name}'),
+              const SizedBox(height: 16),
+              Text('Available Quantity: ${resource.quantity}'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: quantityController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Requested Quantity',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final requestedQty = int.tryParse(quantityController.text);
+                if (requestedQty == null || requestedQty <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Please enter a valid quantity'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                if (requestedQty > resource.quantity) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Quantity cannot exceed ${resource.quantity}'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                
+                Navigator.pop(context);
+                if (endpointId != null) {
+                  p2pService.requestSpecificResource(
+                    endpointId,
+                    resource.id,
+                    requestedQty,
+                    p2pService.localDeviceName ?? 'Unknown',
+                  );
+                }
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Request sent for ${resource.name} (Qty: $requestedQty)'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Send Request'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Quantity is 1, just confirm
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Request Resource'),
+          content: Text('Do you want to request ${resource.name}?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                if (endpointId != null) {
+                  p2pService.requestSpecificResource(
+                    endpointId,
+                    resource.id,
+                    1,
+                    p2pService.localDeviceName ?? 'Unknown',
+                  );
+                }
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Request sent for ${resource.name}'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              },
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  void _showResourceRequestDialog(Map<String, dynamic> requestData) {
+    final resource = requestData['resource'] as ResourceModel;
+    final requestedQuantity = requestData['requestedQuantity'] as int;
+    final requesterName = requestData['requesterName'] as String;
+    final endpointId = requestData['endpointId'] as String;
+    final resourceId = requestData['resourceId'] as String;
+    
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Request Resource'),
-        content: Text('Do you want to request ${resource.name}?'),
+        title: const Text('Resource Request'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('$requesterName is requesting:'),
+            const SizedBox(height: 8),
+            Text(
+              '${resource.name}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(height: 4),
+            Text('Quantity: $requestedQuantity / ${resource.quantity}'),
+            const SizedBox(height: 4),
+            Text('Location: ${resource.location}'),
+          ],
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () {
+              Navigator.pop(context);
+              final p2pService = Provider.of<P2PService>(context, listen: false);
+              p2pService.respondToResourceRequest(endpointId, resourceId, false, 0, requesterName);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Request denied'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+            },
+            child: const Text('Deny'),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
+              final p2pService = Provider.of<P2PService>(context, listen: false);
+              
+              // Update resource
+              p2pService.updateResourceAfterApproval(resourceId, requestedQuantity, requesterName);
+              
+              // Send response
+              p2pService.respondToResourceRequest(endpointId, resourceId, true, requestedQuantity, requesterName);
+              
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Request sent for ${resource.name}'),
+                  content: Text('Request approved! ${resource.name} provided to $requesterName'),
                   backgroundColor: Colors.green,
                 ),
               );
             },
-            child: const Text('Confirm'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text('Approve'),
           ),
         ],
       ),
@@ -812,12 +1020,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 status: 'Available',
               );
 
-              // Add to local resources
-              setState(() {
-                _localResources.add(newResource);
-              });
-
-              // Broadcast to network
+              // Broadcast to network (this will also add it to _networkResources)
               p2pService.broadcastResource(newResource);
 
               Navigator.pop(dialogContext);

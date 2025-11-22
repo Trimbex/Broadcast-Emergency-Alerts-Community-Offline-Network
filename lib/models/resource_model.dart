@@ -19,6 +19,29 @@ class ResourceModel {
     this.deviceId,
   });
 
+  // Create a copy with updated fields
+  ResourceModel copyWith({
+    String? id,
+    String? name,
+    String? category,
+    int? quantity,
+    String? location,
+    String? provider,
+    String? status,
+    String? deviceId,
+  }) {
+    return ResourceModel(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      category: category ?? this.category,
+      quantity: quantity ?? this.quantity,
+      location: location ?? this.location,
+      provider: provider ?? this.provider,
+      status: status ?? this.status,
+      deviceId: deviceId ?? this.deviceId,
+    );
+  }
+
   // Convert to JSON for P2P transmission
   Map<String, dynamic> toJson() {
     return {

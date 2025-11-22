@@ -16,8 +16,6 @@ class NetworkDashboard extends StatefulWidget {
 
 class _NetworkDashboardState extends State<NetworkDashboard> {
   final Color primaryColor = const Color(0xFF898AC4);
-  String _selectedRange = '1 km';
-  final List<String> _ranges = ['500 m', '1 km', '5 km', '10 km'];
   bool _isInitialized = false;
 
   final List<String> _predefinedMessages = [
@@ -143,10 +141,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 onPressed: _refreshNetwork,
               ),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.white),
-                onPressed: _showRangeSettings,
-              ),
             ],
           ),
           body: Container(
@@ -180,12 +174,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildStatusItem(
-                        icon: Icons.wifi,
-                        label: 'Range',
-                        value: _selectedRange,
-                      ),
-                      Container(width: 1, height: 40, color: Colors.grey[300]),
                       _buildStatusItem(
                         icon: Icons.people,
                         label: 'Connected',
@@ -477,31 +465,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     await p2pService.stopDiscovery();
     await Future.delayed(const Duration(milliseconds: 500));
     await p2pService.startDiscovery();
-  }
-
-  void _showRangeSettings() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Range'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _ranges.map((range) {
-            return ListTile(
-              title: Text(range),
-              leading: Radio<String>(
-                value: range,
-                groupValue: _selectedRange,
-                onChanged: (value) {
-                  setState(() => _selectedRange = value!);
-                  Navigator.pop(context);
-                },
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
   }
 
   void _showQuickMessageDialog() {

@@ -40,6 +40,9 @@ class P2PService extends ChangeNotifier {
   // Resource cache - stores all resources from all devices
   final Map<String, ResourceModel> _networkResources = {}; // Key: resourceId_deviceId
   final StreamController<ResourceModel> _resourceStreamController = StreamController<ResourceModel>.broadcast();
+  
+  // Resource request notifications
+  final StreamController<Map<String, dynamic>> _resourceRequestStreamController = StreamController<Map<String, dynamic>>.broadcast();
 
   
   // Connection state
@@ -59,6 +62,7 @@ class P2PService extends ChangeNotifier {
   int get batteryLevel => _batteryLevel;
   List<ResourceModel> get networkResources => _networkResources.values.toList();
   Stream<ResourceModel> get resourceStream => _resourceStreamController.stream;
+  Stream<Map<String, dynamic>> get resourceRequestStream => _resourceRequestStreamController.stream;
 
   /// Initialize the P2P service
   Future<bool> initialize(String userName) async {
@@ -386,6 +390,12 @@ Future<bool> _requestPermissions() async {
       case 'resource_list':
         _handleResourceList(endpointId, data);
         break;
+      case 'resource_request_specific':
+        _handleResourceRequestSpecific(endpointId, data);
+        break;
+      case 'resource_request_response':
+        _handleResourceRequestResponse(endpointId, data);
+        break;
       default:
         debugPrint('⚠️ P2P: Unknown data type: $type');
     }
@@ -471,7 +481,7 @@ Future<bool> _requestPermissions() async {
     );
 
     // Store locally
-    final resourceKey = '${resource.id}_${_localDeviceId}';
+    final resourceKey = '${resource.id}_$_localDeviceId';
     _networkResources[resourceKey] = resourceWithDevice;
     _resourceStreamController.add(resourceWithDevice);
     notifyListeners();
@@ -528,6 +538,12 @@ Future<bool> _requestPermissions() async {
         deviceId: resource.deviceId ?? endpointId,
       );
 
+      // Skip if this resource is from our own device (already added in broadcastResource)
+      if (resourceWithDevice.deviceId == _localDeviceId) {
+        debugPrint('📦 P2P: Skipping own resource: ${resource.name}');
+        return;
+      }
+
       final resourceKey = '${resource.id}_${resourceWithDevice.deviceId}';
       
       // Only add if not already exists (avoid duplicates)
@@ -558,6 +574,7 @@ Future<bool> _requestPermissions() async {
   void _handleResourceList(String endpointId, Map<String, dynamic> data) {
     try {
       final resourcesJson = data['resources'] as List<dynamic>;
+      int addedCount = 0;
       
       for (var resourceJson in resourcesJson) {
         final resource = ResourceModel.fromJson(resourceJson as Map<String, dynamic>);
@@ -574,17 +591,25 @@ Future<bool> _requestPermissions() async {
           deviceId: resource.deviceId ?? endpointId,
         );
 
+        // Skip if this resource is from our own device
+        if (resourceWithDevice.deviceId == _localDeviceId) {
+          continue;
+        }
+
         final resourceKey = '${resource.id}_${resourceWithDevice.deviceId}';
         
         // Only add if not already exists
         if (!_networkResources.containsKey(resourceKey)) {
           _networkResources[resourceKey] = resourceWithDevice;
           _resourceStreamController.add(resourceWithDevice);
+          addedCount++;
         }
       }
       
-      notifyListeners();
-      debugPrint('📦 P2P: Received ${resourcesJson.length} resources from $endpointId');
+      if (addedCount > 0) {
+        notifyListeners();
+        debugPrint('📦 P2P: Received $addedCount new resources from $endpointId');
+      }
     } catch (e) {
       debugPrint('❌ P2P: Failed to parse resource list: $e');
     }
@@ -612,6 +637,131 @@ Future<bool> _requestPermissions() async {
         .toList();
   }
 
+  /// Request a specific resource with quantity
+  Future<void> requestSpecificResource(String endpointId, String resourceId, int requestedQuantity, String requesterName) async {
+    final requestData = {
+      'type': 'resource_request_specific',
+      'resourceId': resourceId,
+      'requestedQuantity': requestedQuantity,
+      'requesterId': _localDeviceId,
+      'requesterName': requesterName,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    await _sendData(endpointId, requestData);
+    debugPrint('📥 P2P: Requested $requestedQuantity of resource $resourceId from $endpointId');
+  }
+
+  /// Handle specific resource request
+  void _handleResourceRequestSpecific(String endpointId, Map<String, dynamic> data) {
+    final resourceId = data['resourceId'] as String;
+    final requestedQuantity = data['requestedQuantity'] as int;
+    final requesterId = data['requesterId'] as String;
+    final requesterName = data['requesterName'] as String? ?? 'Unknown';
+    
+    // Find the resource in our local resources
+    final resourceKey = '${resourceId}_$_localDeviceId';
+    final resource = _networkResources[resourceKey];
+    
+    if (resource != null) {
+      // Notify UI about the request
+      _resourceRequestStreamController.add({
+        'resourceId': resourceId,
+        'resource': resource,
+        'requestedQuantity': requestedQuantity,
+        'requesterId': requesterId,
+        'requesterName': requesterName,
+        'endpointId': endpointId,
+      });
+      debugPrint('📥 P2P: Received resource request for ${resource.name} (Qty: $requestedQuantity) from $requesterName');
+    } else {
+      debugPrint('⚠️ P2P: Resource $resourceId not found for request');
+    }
+  }
+
+  /// Respond to a resource request (approve or deny)
+  Future<void> respondToResourceRequest(String endpointId, String resourceId, bool approved, int quantity, String requesterName) async {
+    final responseData = {
+      'type': 'resource_request_response',
+      'resourceId': resourceId,
+      'approved': approved,
+      'quantity': quantity,
+      'requesterName': requesterName,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    await _sendData(endpointId, responseData);
+    debugPrint('📤 P2P: Sent resource request response: ${approved ? "Approved" : "Denied"}');
+  }
+
+  /// Handle resource request response (received by requester)
+  void _handleResourceRequestResponse(String endpointId, Map<String, dynamic> data) {
+    final resourceId = data['resourceId'] as String;
+    final approved = data['approved'] as bool;
+    final quantity = data['quantity'] as int;
+    final requesterName = data['requesterName'] as String? ?? 'Unknown';
+    
+    if (approved) {
+      // Find the resource in our network resources and update it
+      // This updates the requester's view of the resource
+      for (var entry in _networkResources.entries) {
+        if (entry.value.id == resourceId) {
+          final newQuantity = entry.value.quantity - quantity;
+          final updatedResource = entry.value.copyWith(
+            quantity: newQuantity,
+            status: newQuantity <= 0 
+                ? 'Unavailable' 
+                : 'Provided to: $requesterName (Qty: $quantity)',
+          );
+          _networkResources[entry.key] = updatedResource;
+          _resourceStreamController.add(updatedResource);
+          notifyListeners();
+          debugPrint('✅ P2P: Resource request approved - ${updatedResource.name} updated');
+          break;
+        }
+      }
+    } else {
+      debugPrint('❌ P2P: Resource request denied for $resourceId');
+    }
+  }
+
+  /// Update resource after approval (called by UI)
+  void updateResourceAfterApproval(String resourceId, int requestedQuantity, String requesterName) {
+    final resourceKey = '${resourceId}_$_localDeviceId';
+    final resource = _networkResources[resourceKey];
+    
+    if (resource != null) {
+      final newQuantity = resource.quantity - requestedQuantity;
+      String newStatus;
+      
+      if (newQuantity <= 0) {
+        newStatus = 'Unavailable';
+      } else if (resource.status == 'Available') {
+        newStatus = 'Provided to: $requesterName (Qty: $requestedQuantity)';
+      } else {
+        // If already provided to someone, append the new requester
+        newStatus = '${resource.status}, $requesterName (Qty: $requestedQuantity)';
+      }
+      
+      final updatedResource = resource.copyWith(
+        quantity: newQuantity,
+        status: newStatus,
+      );
+      
+      _networkResources[resourceKey] = updatedResource;
+      _resourceStreamController.add(updatedResource);
+      notifyListeners();
+      
+      // Broadcast updated resource to all devices
+      final resourceData = {
+        'type': 'resource',
+        'resource': updatedResource.toJson(),
+        'timestamp': DateTime.now().toIso8601String(),
+      };
+      broadcastData(resourceData);
+      
+      debugPrint('✅ P2P: Updated resource ${resource.name} after approval');
+    }
+  }
+
   /// Dispose resources
   @override
   void dispose() {
@@ -621,6 +771,7 @@ Future<bool> _requestPermissions() async {
     }
     _messageStreams.clear();
     _resourceStreamController.close();
+    _resourceRequestStreamController.close();
     super.dispose();
   }
 }
