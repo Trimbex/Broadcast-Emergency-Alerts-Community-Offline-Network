@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/resource_model.dart';
+import '../services/p2p_service.dart';
 
 class ResourceSharingPage extends StatefulWidget {
   const ResourceSharingPage({super.key});
@@ -12,60 +15,53 @@ class ResourceSharingPage extends StatefulWidget {
 class _ResourceSharingPageState extends State<ResourceSharingPage> {
   String _selectedCategory = 'All';
   final List<String> _categories = ['All', 'Medical', 'Food', 'Shelter', 'Water', 'Other'];
+  
+  // Local resources (created by this user)
+  final List<ResourceModel> _localResources = [];
+  
+  // Stream subscription for network resources
+  StreamSubscription<ResourceModel>? _resourceSubscription;
 
-  final List<ResourceModel> _resources = [
-    ResourceModel(
-      id: '1',
-      name: 'First Aid Kit',
-      category: 'Medical',
-      quantity: 5,
-      location: 'Community Center - 0.5 km',
-      provider: 'Sarah Johnson',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '2',
-      name: 'Bottled Water (24-pack)',
-      category: 'Water',
-      quantity: 12,
-      location: 'Emergency Shelter - 1.2 km',
-      provider: 'Emergency Center',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '3',
-      name: 'Emergency Shelter Space',
-      category: 'Shelter',
-      quantity: 20,
-      location: 'High School Gym - 2.0 km',
-      provider: 'Emergency Center',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '4',
-      name: 'Canned Food',
-      category: 'Food',
-      quantity: 30,
-      location: 'Relief Center - 1.5 km',
-      provider: 'Mike Chen',
-      status: 'Available',
-    ),
-    ResourceModel(
-      id: '5',
-      name: 'Blankets',
-      category: 'Shelter',
-      quantity: 15,
-      location: 'Community Hall - 0.8 km',
-      provider: 'Lisa Rodriguez',
-      status: 'Limited',
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Listen to resource updates from network
+    final p2pService = Provider.of<P2PService>(context, listen: false);
+    _resourceSubscription = p2pService.resourceStream.listen((resource) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _resourceSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final p2pService = Provider.of<P2PService>(context);
+    
+    // Combine local and network resources
+    final allResources = [
+      ..._localResources,
+      ...p2pService.networkResources,
+    ];
+    
+    // Remove duplicates (same id and deviceId)
+    final uniqueResources = <String, ResourceModel>{};
+    for (var resource in allResources) {
+      final key = '${resource.id}_${resource.deviceId ?? "local"}';
+      if (!uniqueResources.containsKey(key)) {
+        uniqueResources[key] = resource;
+      }
+    }
+    
     final filteredResources = _selectedCategory == 'All'
-        ? _resources
-        : _resources.where((r) => r.category == _selectedCategory).toList();
+        ? uniqueResources.values.toList()
+        : uniqueResources.values.where((r) => r.category == _selectedCategory).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -232,10 +228,15 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   }
 
   Widget _buildResourceCard(ResourceModel resource) {
+    final p2pService = Provider.of<P2PService>(context, listen: false);
     final IconData categoryIcon = _getCategoryIcon(resource.category);
     final Color statusColor = resource.status == 'Available' 
         ? const Color(0xFF4CAF50) 
         : const Color(0xFFFF9800);
+    
+    // Check if resource is from network (another device) or local
+    final isFromNetwork = resource.deviceId != null && 
+                         resource.deviceId != p2pService.localDeviceId;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -261,12 +262,52 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        resource.name,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              resource.name,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (isFromNetwork)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.blue[200]!,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.network_check,
+                                    size: 12,
+                                    color: Colors.blue[700],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Network',
+                                    style: TextStyle(
+                                      color: Colors.blue[700],
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 6),
                       Row(
@@ -414,6 +455,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   }
 
   void _showAddResourceDialog() {
+    final p2pService = Provider.of<P2PService>(context, listen: false);
     final nameController = TextEditingController();
     final quantityController = TextEditingController();
     final locationController = TextEditingController();
@@ -421,7 +463,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Share a Resource'),
         content: SingleChildScrollView(
           child: Column(
@@ -474,12 +516,53 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              if (nameController.text.isEmpty ||
+                  quantityController.text.isEmpty ||
+                  locationController.text.isEmpty) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill all fields'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              final quantity = int.tryParse(quantityController.text);
+              if (quantity == null || quantity <= 0) {
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a valid quantity'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+                return;
+              }
+
+              final newResource = ResourceModel(
+                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                name: nameController.text,
+                category: selectedCategory,
+                quantity: quantity,
+                location: locationController.text,
+                provider: p2pService.localDeviceName ?? 'Unknown',
+                status: 'Available',
+              );
+
+              // Add to local resources
+              setState(() {
+                _localResources.add(newResource);
+              });
+
+              // Broadcast to network
+              p2pService.broadcastResource(newResource);
+
+              Navigator.pop(dialogContext);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Resource shared successfully'),

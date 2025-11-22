@@ -6,6 +6,7 @@ class ResourceModel {
   final String location;
   final String provider;
   final String status;
+  final String? deviceId; // ID of the device that shared this resource
 
   ResourceModel({
     required this.id,
@@ -15,5 +16,34 @@ class ResourceModel {
     required this.location,
     required this.provider,
     required this.status,
+    this.deviceId,
   });
+
+  // Convert to JSON for P2P transmission
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'category': category,
+      'quantity': quantity,
+      'location': location,
+      'provider': provider,
+      'status': status,
+      'deviceId': deviceId,
+    };
+  }
+
+  // Create from JSON received via P2P
+  factory ResourceModel.fromJson(Map<String, dynamic> json) {
+    return ResourceModel(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      category: json['category'] as String,
+      quantity: json['quantity'] as int,
+      location: json['location'] as String,
+      provider: json['provider'] as String,
+      status: json['status'] as String,
+      deviceId: json['deviceId'] as String?,
+    );
+  }
 }

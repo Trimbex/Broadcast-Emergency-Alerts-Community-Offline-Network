@@ -7,8 +7,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:battery_plus/battery_plus.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
+import '../models/resource_model.dart';
 import 'dart:io';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 /// P2P Communication Service using Nearby Connections API
 /// 
@@ -37,6 +37,10 @@ class P2PService extends ChangeNotifier {
   //mesasge history cashe 
   final Map<String, List<MessageModel>> _messageHistory = {};
 
+  // Resource cache - stores all resources from all devices
+  final Map<String, ResourceModel> _networkResources = {}; // Key: resourceId_deviceId
+  final StreamController<ResourceModel> _resourceStreamController = StreamController<ResourceModel>.broadcast();
+
   
   // Connection state
   bool _isAdvertising = false;
@@ -53,6 +57,8 @@ class P2PService extends ChangeNotifier {
   String? get localDeviceId => _localDeviceId;
   String? get localDeviceName => _localDeviceName;
   int get batteryLevel => _batteryLevel;
+  List<ResourceModel> get networkResources => _networkResources.values.toList();
+  Stream<ResourceModel> get resourceStream => _resourceStreamController.stream;
 
   /// Initialize the P2P service
   Future<bool> initialize(String userName) async {
@@ -262,6 +268,9 @@ Future<bool> _requestPermissions() async {
       
       // Send initial handshake
       _sendHandshake(endpointId);
+      
+      // Request resources from newly connected device
+      _requestResources(endpointId);
     } else {
       debugPrint('❌ P2P: Failed to connect to $endpointId: $status');
     }
@@ -273,6 +282,9 @@ Future<bool> _requestPermissions() async {
     _connectedDevices.remove(endpointId);
     _messageStreams[endpointId]?.close();
     _messageStreams.remove(endpointId);
+    
+    // Remove resources from disconnected device
+    _networkResources.removeWhere((key, resource) => resource.deviceId == endpointId);
     notifyListeners();
   }
 
@@ -366,6 +378,15 @@ Future<bool> _requestPermissions() async {
       case 'emergency':
         _handleEmergencyAlert(endpointId, data);
         break;
+      case 'resource':
+        _handleResource(endpointId, data);
+        break;
+      case 'resource_request':
+        _handleResourceRequest(endpointId, data);
+        break;
+      case 'resource_list':
+        _handleResourceList(endpointId, data);
+        break;
       default:
         debugPrint('⚠️ P2P: Unknown data type: $type');
     }
@@ -436,6 +457,147 @@ Future<bool> _requestPermissions() async {
     return _messageStreams[endpointId]?.stream;
   }
 
+  /// Broadcast a resource to all connected devices
+  Future<void> broadcastResource(ResourceModel resource) async {
+    // Add deviceId to resource
+    final resourceWithDevice = ResourceModel(
+      id: resource.id,
+      name: resource.name,
+      category: resource.category,
+      quantity: resource.quantity,
+      location: resource.location,
+      provider: resource.provider,
+      status: resource.status,
+      deviceId: _localDeviceId,
+    );
+
+    // Store locally
+    final resourceKey = '${resource.id}_${_localDeviceId}';
+    _networkResources[resourceKey] = resourceWithDevice;
+    _resourceStreamController.add(resourceWithDevice);
+    notifyListeners();
+
+    // Broadcast to all connected devices
+    final resourceData = {
+      'type': 'resource',
+      'resource': resourceWithDevice.toJson(),
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    await broadcastData(resourceData);
+    debugPrint('📦 P2P: Broadcasted resource: ${resource.name}');
+  }
+
+  /// Request all resources from a specific device
+  void _requestResources(String endpointId) {
+    final requestData = {
+      'type': 'resource_request',
+      'senderId': _localDeviceId,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    _sendData(endpointId, requestData);
+    debugPrint('📥 P2P: Requested resources from $endpointId');
+  }
+
+  /// Send all local resources to a specific device
+  Future<void> _sendResourceList(String endpointId, List<ResourceModel> resources) async {
+    final resourceListData = {
+      'type': 'resource_list',
+      'senderId': _localDeviceId,
+      'resources': resources.map((r) => r.toJson()).toList(),
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    await _sendData(endpointId, resourceListData);
+    debugPrint('📤 P2P: Sent ${resources.length} resources to $endpointId');
+  }
+
+  /// Handle received resource
+  void _handleResource(String endpointId, Map<String, dynamic> data) {
+    try {
+      final resourceJson = data['resource'] as Map<String, dynamic>;
+      final resource = ResourceModel.fromJson(resourceJson);
+      
+      // Ensure deviceId is set
+      final resourceWithDevice = ResourceModel(
+        id: resource.id,
+        name: resource.name,
+        category: resource.category,
+        quantity: resource.quantity,
+        location: resource.location,
+        provider: resource.provider,
+        status: resource.status,
+        deviceId: resource.deviceId ?? endpointId,
+      );
+
+      final resourceKey = '${resource.id}_${resourceWithDevice.deviceId}';
+      
+      // Only add if not already exists (avoid duplicates)
+      if (!_networkResources.containsKey(resourceKey)) {
+        _networkResources[resourceKey] = resourceWithDevice;
+        _resourceStreamController.add(resourceWithDevice);
+        notifyListeners();
+        debugPrint('📦 P2P: Received resource: ${resource.name} from $endpointId');
+      }
+    } catch (e) {
+      debugPrint('❌ P2P: Failed to parse resource: $e');
+    }
+  }
+
+  /// Handle resource request
+  void _handleResourceRequest(String endpointId, Map<String, dynamic> data) {
+    // Send all local resources to the requesting device
+    final localResources = _networkResources.values
+        .where((r) => r.deviceId == _localDeviceId)
+        .toList();
+    
+    if (localResources.isNotEmpty) {
+      _sendResourceList(endpointId, localResources);
+    }
+  }
+
+  /// Handle resource list (multiple resources at once)
+  void _handleResourceList(String endpointId, Map<String, dynamic> data) {
+    try {
+      final resourcesJson = data['resources'] as List<dynamic>;
+      
+      for (var resourceJson in resourcesJson) {
+        final resource = ResourceModel.fromJson(resourceJson as Map<String, dynamic>);
+        
+        // Ensure deviceId is set
+        final resourceWithDevice = ResourceModel(
+          id: resource.id,
+          name: resource.name,
+          category: resource.category,
+          quantity: resource.quantity,
+          location: resource.location,
+          provider: resource.provider,
+          status: resource.status,
+          deviceId: resource.deviceId ?? endpointId,
+        );
+
+        final resourceKey = '${resource.id}_${resourceWithDevice.deviceId}';
+        
+        // Only add if not already exists
+        if (!_networkResources.containsKey(resourceKey)) {
+          _networkResources[resourceKey] = resourceWithDevice;
+          _resourceStreamController.add(resourceWithDevice);
+        }
+      }
+      
+      notifyListeners();
+      debugPrint('📦 P2P: Received ${resourcesJson.length} resources from $endpointId');
+    } catch (e) {
+      debugPrint('❌ P2P: Failed to parse resource list: $e');
+    }
+  }
+
+  /// Get all resources from a specific device
+  List<ResourceModel> getResourcesByDevice(String deviceId) {
+    return _networkResources.values
+        .where((r) => r.deviceId == deviceId)
+        .toList();
+  }
+
   /// Dispose resources
   @override
   void dispose() {
@@ -444,6 +606,7 @@ Future<bool> _requestPermissions() async {
       stream.close();
     }
     _messageStreams.clear();
+    _resourceStreamController.close();
     super.dispose();
   }
 }
