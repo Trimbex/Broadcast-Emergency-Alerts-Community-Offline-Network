@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/database_service.dart';
 
 class IdentitySetupPage extends StatefulWidget {
   const IdentitySetupPage({super.key});
@@ -22,13 +22,14 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
 
   // If identity already exists, skip this page
   Future<void> _checkIfIdentityExists() async {
-    final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('user_name');
-    if (name != null && name.isNotEmpty) {
+    final userProfile = await DatabaseService.instance.getUserProfile();
+    if (userProfile != null && userProfile['name'] != null) {
       // Automatically go to landing page
-      Future.delayed(Duration.zero, () {
-        Navigator.pushReplacementNamed(context, '/landing');
-      });
+      if (mounted) {
+        Future.delayed(Duration.zero, () {
+          Navigator.pushReplacementNamed(context, '/landing');
+        });
+      }
     }
   }
 
@@ -44,12 +45,21 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
     }
 
     setState(() => _isSaving = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', _nameController.text.trim());
-    await prefs.setString('user_role', _roleController.text.trim());
+    
+    // Generate a persistent device ID
+    final deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    await DatabaseService.instance.saveUserProfile(
+      _nameController.text.trim(),
+      _roleController.text.trim(),
+      deviceId,
+    );
+    
     setState(() => _isSaving = false);
 
-    Navigator.pushReplacementNamed(context, '/landing');
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/landing');
+    }
   }
 
   @override

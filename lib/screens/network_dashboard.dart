@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/database_service.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/device_model.dart';
 import '../services/p2p_service.dart';
@@ -70,9 +70,9 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   }
 
   Future<String> _getUserName() async {
-    // Get from SharedPreferences (set in identity setup)
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_name') ?? 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    // Get from Database (set in identity setup)
+    final userProfile = await DatabaseService.instance.getUserProfile();
+    return userProfile?['name'] ?? 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
   }
 
   @override
