@@ -16,8 +16,6 @@ class NetworkDashboard extends StatefulWidget {
 
 class _NetworkDashboardState extends State<NetworkDashboard> {
   final Color primaryColor = const Color(0xFF898AC4);
-  String _selectedRange = '1 km';
-  final List<String> _ranges = ['500 m', '1 km', '5 km', '10 km'];
   bool _isInitialized = false;
 
   final List<String> _predefinedMessages = [
@@ -143,10 +141,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 icon: const Icon(Icons.refresh, color: Colors.white),
                 onPressed: _refreshNetwork,
               ),
-              IconButton(
-                icon: const Icon(Icons.settings, color: Colors.white),
-                onPressed: _showRangeSettings,
-              ),
             ],
           ),
           body: Container(
@@ -180,12 +174,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      _buildStatusItem(
-                        icon: Icons.wifi,
-                        label: 'Range',
-                        value: _selectedRange,
-                      ),
-                      Container(width: 1, height: 40, color: Colors.grey[300]),
                       _buildStatusItem(
                         icon: Icons.people,
                         label: 'Connected',
@@ -479,31 +467,6 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     await p2pService.startDiscovery();
   }
 
-  void _showRangeSettings() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Select Range'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _ranges.map((range) {
-            return ListTile(
-              title: Text(range),
-              leading: Radio<String>(
-                value: range,
-                groupValue: _selectedRange,
-                onChanged: (value) {
-                  setState(() => _selectedRange = value!);
-                  Navigator.pop(context);
-                },
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
   void _showQuickMessageDialog() {
     final p2pService = Provider.of<P2PService>(context, listen: false);
     
@@ -528,14 +491,15 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 Navigator.pop(context);
                 
                 // Broadcast to all connected devices
-                if (message.contains('help') || message.contains('Emergency')) {
+                if (message.contains('help') || message.contains('Emergency') || message.contains('immediate')) {
                   p2pService.broadcastEmergencyAlert(message);
                 } else {
-                  p2pService.broadcastData({
-                    'type': 'message',
-                    'text': message,
-                    'timestamp': DateTime.now().toIso8601String(),
-                  });
+                  // Send as regular message to all connected devices
+                  for (final device in p2pService.connectedDevices) {
+                    if (device.endpointId != null) {
+                      p2pService.sendMessage(device.endpointId!, message);
+                    }
+                  }
                 }
                 
                 ScaffoldMessenger.of(context).showSnackBar(

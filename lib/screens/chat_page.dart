@@ -25,46 +25,46 @@ void initState() {
 
   // Wait for widget to fully build before accessing context
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-
-    if (args != null) {
-      _device = args['device'] as DeviceModel?;
-
-      // Initialize P2P service
-      _p2pService = Provider.of<P2PService>(context, listen: false);
-
-      if (_device?.endpointId != null) {
-        // 1️⃣ Load old messages from storage
-        _messages.addAll(_p2pService!.getMessageHistory(_device!.endpointId!));
-
-        // 2️⃣ Listen for new incoming messages
-        final stream = _p2pService!.getMessageStream(_device!.endpointId!);
-        stream?.listen((message) {
-          setState(() {
-            _messages.add(message);
-          });
-          _scrollToBottom();
-        });
-      }
-
-      setState(() {}); // Refresh UI with loaded device & messages
-    }
+    _initializeChat();
   });
 }
 
-  void _setupMessageStream() {
-    if (_device?.endpointId == null) return;
-    
+void _initializeChat() {
+  final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+  if (args != null) {
+    _device = args['device'] as DeviceModel?;
+
+    // Initialize P2P service
     _p2pService = Provider.of<P2PService>(context, listen: false);
-    final messageStream = _p2pService!.getMessageStream(_device!.endpointId!);
-    
-    messageStream?.listen((message) {
-      setState(() {
-        _messages.add(message);
+
+    if (_device?.endpointId != null) {
+      // 1️⃣ Load old messages from storage
+      // Use the comprehensive method that checks all possible IDs
+      final endpointId = _device!.endpointId!;
+      final deviceId = _device!.id;
+      
+      _messages.clear();
+      _messages.addAll(_p2pService!.getMessageHistoryForDevice(endpointId, deviceId));
+
+      // 2️⃣ Listen for new incoming messages
+      final stream = _p2pService!.getMessageStream(endpointId);
+      stream?.listen((message) {
+        // Check if message already exists (avoid duplicates)
+        if (!_messages.any((m) => m.id == message.id)) {
+          setState(() {
+            _messages.add(message);
+            // Keep sorted
+            _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          });
+          _scrollToBottom();
+        }
       });
-      _scrollToBottom();
-    });
+    }
+
+    setState(() {}); // Refresh UI with loaded device & messages
   }
+}
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -77,6 +77,7 @@ void initState() {
       });
     }
   }
+
 
   @override
   void dispose() {
@@ -338,26 +339,21 @@ void initState() {
     final messageText = _messageController.text.trim();
     final p2pService = Provider.of<P2PService>(context, listen: false);
 
-    // Add message locally first
-    final message = MessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: p2pService.localDeviceId ?? 'me',
-      text: messageText,
-      timestamp: DateTime.now(),
-      isMe: true,
-      senderName: p2pService.localDeviceName,
-    );
+    // Clear input first
+    _messageController.clear();
 
-    setState(() {
-      _messages.add(message);
-      _messageController.clear();
-    });
-    
-    _scrollToBottom();
-
-    // Send via P2P
+    // Send via P2P (this will store in history and notify stream)
     try {
       await p2pService.sendMessage(_device!.endpointId!, messageText);
+      
+      // Reload messages from service to ensure we have the stored version
+      final endpointId = _device!.endpointId!;
+      final deviceId = _device!.id;
+      setState(() {
+        _messages.clear();
+        _messages.addAll(p2pService.getMessageHistoryForDevice(endpointId, deviceId));
+      });
+      _scrollToBottom();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -491,28 +487,35 @@ void initState() {
 
     final p2pService = Provider.of<P2PService>(context, listen: false);
 
-    // Add message locally
-    final msg = MessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: p2pService.localDeviceId ?? 'me',
-      text: message,
-      timestamp: DateTime.now(),
-      isMe: true,
-      senderName: p2pService.localDeviceName,
-      isEmergency: isEmergency,
-    );
-
-    setState(() {
-      _messages.add(msg);
-    });
-    
-    _scrollToBottom();
-
-    // Send via P2P
-    if (isEmergency) {
-      await p2pService.broadcastEmergencyAlert(message);
-    } else {
-      await p2pService.sendMessage(_device!.endpointId!, message);
+    // Send via P2P (this will store in history)
+    try {
+      if (isEmergency) {
+        await p2pService.broadcastEmergencyAlert(message);
+      } else {
+        await p2pService.sendMessage(_device!.endpointId!, message);
+      }
+      
+      // Reload messages from service to ensure we have the stored version
+      // For emergency alerts, reload from all connected devices to show the broadcast
+      final endpointId = _device!.endpointId!;
+      final deviceId = _device!.id;
+      
+      setState(() {
+        _messages.clear();
+        _messages.addAll(p2pService.getMessageHistoryForDevice(endpointId, deviceId));
+        // Sort by timestamp to ensure proper order
+        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
