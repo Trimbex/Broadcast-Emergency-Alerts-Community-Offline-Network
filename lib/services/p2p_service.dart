@@ -269,8 +269,7 @@ Future<bool> _requestPermissions() async {
       // Send initial handshake
       _sendHandshake(endpointId);
       
-      // Request resources from newly connected device
-      _requestResources(endpointId);
+      // Note: Resources are now requested manually by user (on-demand)
     } else {
       debugPrint('❌ P2P: Failed to connect to $endpointId: $status');
     }
@@ -488,14 +487,14 @@ Future<bool> _requestPermissions() async {
     debugPrint('📦 P2P: Broadcasted resource: ${resource.name}');
   }
 
-  /// Request all resources from a specific device
-  void _requestResources(String endpointId) {
+  /// Request all resources from a specific device (public method for manual requests)
+  Future<void> requestResourcesFromDevice(String endpointId) async {
     final requestData = {
       'type': 'resource_request',
       'senderId': _localDeviceId,
       'timestamp': DateTime.now().toIso8601String(),
     };
-    _sendData(endpointId, requestData);
+    await _sendData(endpointId, requestData);
     debugPrint('📥 P2P: Requested resources from $endpointId');
   }
 
@@ -591,10 +590,25 @@ Future<bool> _requestPermissions() async {
     }
   }
 
-  /// Get all resources from a specific device
+  /// Get all resources from a specific device (by deviceId)
   List<ResourceModel> getResourcesByDevice(String deviceId) {
     return _networkResources.values
         .where((r) => r.deviceId == deviceId)
+        .toList();
+  }
+  
+  /// Get all resources from a device by endpointId
+  /// This checks both endpointId and the device's actual ID (from handshake)
+  List<ResourceModel> getResourcesByEndpointId(String endpointId) {
+    // First, try to find the device to get its actual deviceId
+    final device = _connectedDevices[endpointId];
+    final deviceId = device?.id;
+    
+    // Resources might be stored with:
+    // 1. endpointId as deviceId (if handshake not received yet)
+    // 2. actual deviceId (from handshake)
+    return _networkResources.values
+        .where((r) => r.deviceId == endpointId || (deviceId != null && r.deviceId == deviceId))
         .toList();
   }
 

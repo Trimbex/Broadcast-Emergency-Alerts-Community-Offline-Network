@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/voice_command_button.dart';
 import '../models/resource_model.dart';
+import '../models/device_model.dart' as device_model;
 import '../services/p2p_service.dart';
 
 class ResourceSharingPage extends StatefulWidget {
@@ -21,6 +22,12 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   
   // Stream subscription for network resources
   StreamSubscription<ResourceModel>? _resourceSubscription;
+  
+  // Track which devices we're requesting resources from
+  final Set<String> _requestingFromDevices = {};
+  
+  // Show devices section
+  bool _showDevices = false;
 
   @override
   void initState() {
@@ -68,6 +75,15 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         title: const Text('Resource Sharing'),
         actions: [
           IconButton(
+            icon: Icon(_showDevices ? Icons.list : Icons.people),
+            onPressed: () {
+              setState(() {
+                _showDevices = !_showDevices;
+              });
+            },
+            tooltip: _showDevices ? 'Show Resources' : 'Show Devices',
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
               // Search functionality
@@ -75,125 +91,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Category Filter
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _categories.length,
-              itemBuilder: (context, index) {
-                final category = _categories[index];
-                final isSelected = category == _selectedCategory;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FilterChip(
-                    label: Text(category),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedCategory = category;
-                      });
-                    },
-                    backgroundColor: Colors.grey[200],
-                    selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // Resource Statistics
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  icon: Icons.inventory,
-                  label: 'Total Items',
-                  value: '${filteredResources.length}',
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: Colors.grey[300],
-                ),
-                _buildStatItem(
-                  icon: Icons.check_circle,
-                  label: 'Available',
-                  value: '${filteredResources.where((r) => r.status == 'Available').length}',
-                ),
-                Container(
-                  width: 1,
-                  height: 40,
-                  color: Colors.grey[300],
-                ),
-                _buildStatItem(
-                  icon: Icons.people,
-                  label: 'Providers',
-                  value: '${filteredResources.map((r) => r.provider).toSet().length}',
-                ),
-              ],
-            ),
-          ),
-
-          // Resource List
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: filteredResources.length,
-              itemBuilder: (context, index) {
-                return _buildResourceCard(filteredResources[index]);
-              },
-            ),
-          ),
-
-          // Bottom Action Bar
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.2),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showAddResourceDialog,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Share Resource'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                const VoiceCommandButton(isCompact: true),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: _showDevices ? _buildDevicesView(p2pService) : _buildResourcesView(p2pService, filteredResources),
     );
   }
 
@@ -408,6 +306,366 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDevicesView(P2PService p2pService) {
+    final connectedDevices = p2pService.connectedDevices;
+    
+    if (connectedDevices.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No devices connected',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Connect to devices in the Network Dashboard',
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+    
+    return Column(
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.blue[50],
+            border: Border(
+              bottom: BorderSide(color: Colors.grey[300]!),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Tap on a device to request their resources',
+                  style: TextStyle(
+                    color: Colors.blue[900],
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        
+        // Devices List
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: connectedDevices.length,
+            itemBuilder: (context, index) {
+              return _buildDeviceCard(connectedDevices[index], p2pService);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDeviceCard(device_model.DeviceModel device, P2PService p2pService) {
+    final isRequesting = _requestingFromDevices.contains(device.endpointId);
+    final hasResources = device.endpointId != null 
+        ? p2pService.getResourcesByEndpointId(device.endpointId!).isNotEmpty
+        : false;
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: isRequesting ? null : () => _requestResourcesFromDevice(device, p2pService),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Avatar
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    device.name.isNotEmpty ? device.name[0].toUpperCase() : '?',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              
+              // Device Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      device.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Text(
+                          device.distance,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                        if (hasResources) ...[
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green[100],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.inventory, size: 12, color: Colors.green[700]),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${device.endpointId != null ? p2pService.getResourcesByEndpointId(device.endpointId!).length : 0} resources',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.green[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Action Button
+              if (isRequesting)
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: () => _requestResourcesFromDevice(device, p2pService),
+                  tooltip: 'Request resources',
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _requestResourcesFromDevice(device_model.DeviceModel device, P2PService p2pService) async {
+    if (device.endpointId == null) return;
+    
+    setState(() {
+      _requestingFromDevices.add(device.endpointId!);
+    });
+    
+    try {
+      await p2pService.requestResourcesFromDevice(device.endpointId!);
+      
+      // Show success message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Requested resources from ${device.name}'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to request resources: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _requestingFromDevices.remove(device.endpointId!);
+        });
+      }
+    }
+  }
+
+  Widget _buildResourcesView(P2PService p2pService, List<ResourceModel> filteredResources) {
+    return Column(
+      children: [
+        // Category Filter
+        Container(
+          height: 60,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: _categories.length,
+            itemBuilder: (context, index) {
+              final category = _categories[index];
+              final isSelected = category == _selectedCategory;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(category),
+                  selected: isSelected,
+                  onSelected: (selected) {
+                    setState(() {
+                      _selectedCategory = category;
+                    });
+                  },
+                  backgroundColor: Colors.grey[200],
+                  selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                ),
+              );
+            },
+          ),
+        ),
+
+        // Resource Statistics
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem(
+                icon: Icons.inventory,
+                label: 'Total Items',
+                value: '${filteredResources.length}',
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: Colors.grey[300],
+              ),
+              _buildStatItem(
+                icon: Icons.check_circle,
+                label: 'Available',
+                value: '${filteredResources.where((r) => r.status == 'Available').length}',
+              ),
+              Container(
+                width: 1,
+                height: 40,
+                color: Colors.grey[300],
+              ),
+              _buildStatItem(
+                icon: Icons.people,
+                label: 'Providers',
+                value: '${filteredResources.map((r) => r.provider).toSet().length}',
+              ),
+            ],
+          ),
+        ),
+
+        // Resource List
+        Expanded(
+          child: filteredResources.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No resources available',
+                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap the people icon to request resources from connected devices',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filteredResources.length,
+                  itemBuilder: (context, index) {
+                    return _buildResourceCard(filteredResources[index]);
+                  },
+                ),
+        ),
+
+        // Bottom Action Bar
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withValues(alpha: 0.2),
+                spreadRadius: 1,
+                blurRadius: 5,
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _showAddResourceDialog,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Share Resource'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const VoiceCommandButton(isCompact: true),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
