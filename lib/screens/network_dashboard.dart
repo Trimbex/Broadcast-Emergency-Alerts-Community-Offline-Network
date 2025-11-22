@@ -491,14 +491,15 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 Navigator.pop(context);
                 
                 // Broadcast to all connected devices
-                if (message.contains('help') || message.contains('Emergency')) {
+                if (message.contains('help') || message.contains('Emergency') || message.contains('immediate')) {
                   p2pService.broadcastEmergencyAlert(message);
                 } else {
-                  p2pService.broadcastData({
-                    'type': 'message',
-                    'text': message,
-                    'timestamp': DateTime.now().toIso8601String(),
-                  });
+                  // Send as regular message to all connected devices
+                  for (final device in p2pService.connectedDevices) {
+                    if (device.endpointId != null) {
+                      p2pService.sendMessage(device.endpointId!, message);
+                    }
+                  }
                 }
                 
                 ScaffoldMessenger.of(context).showSnackBar(

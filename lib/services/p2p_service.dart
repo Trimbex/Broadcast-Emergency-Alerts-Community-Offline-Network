@@ -255,6 +255,22 @@ Future<bool> _requestPermissions() async {
     if (status == Status.CONNECTED) {
       debugPrint('✅ P2P: Connected to $endpointId');
       
+      // Check if we have messages stored under a different ID for this device
+      // This can happen if device reconnects with a new endpointId
+      String? oldEndpointId;
+      for (var entry in _messageHistory.entries) {
+        // Check if any messages from this endpointId exist under a different key
+        final messages = entry.value;
+        if (messages.isNotEmpty) {
+          // Check if any message has a senderId that matches this endpointId
+          final firstMessage = messages.first;
+          if (firstMessage.senderId == endpointId || entry.key == endpointId) {
+            oldEndpointId = entry.key;
+            break;
+          }
+        }
+      }
+      
       // Add device to connected list
       _connectedDevices[endpointId] = DeviceModel(
         id: endpointId,
@@ -267,6 +283,20 @@ Future<bool> _requestPermissions() async {
       
       // Create message stream for this device
       _messageStreams[endpointId] = StreamController<MessageModel>.broadcast();
+      
+      // If we found old messages, merge them into the new endpointId
+      if (oldEndpointId != null && oldEndpointId != endpointId && _messageHistory.containsKey(oldEndpointId)) {
+        _messageHistory.putIfAbsent(endpointId, () => []);
+        final oldMessages = _messageHistory[oldEndpointId]!;
+        final existingIds = _messageHistory[endpointId]!.map((m) => m.id).toSet();
+        for (var msg in oldMessages) {
+          if (!existingIds.contains(msg.id)) {
+            _messageHistory[endpointId]!.add(msg);
+          }
+        }
+        // Sort by timestamp
+        _messageHistory[endpointId]!.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      }
       
       notifyListeners();
       
@@ -335,7 +365,24 @@ Future<bool> _requestPermissions() async {
       'timestamp': DateTime.now().toIso8601String(),
     };
     
+    // Store sent message in history
+    final sentMessage = MessageModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      senderId: _localDeviceId ?? 'me',
+      text: message,
+      timestamp: DateTime.now(),
+      isMe: true,
+      senderName: _localDeviceName,
+    );
+    
+    _messageHistory.putIfAbsent(endpointId, () => []);
+    _messageHistory[endpointId]!.add(sentMessage);
+    
+    // Notify stream if chat is open
+    _messageStreams[endpointId]?.add(sentMessage);
+    
     await _sendData(endpointId, messageData);
+    notifyListeners();
   }
 
   /// Broadcast emergency alert to all devices
@@ -348,7 +395,28 @@ Future<bool> _requestPermissions() async {
       'timestamp': DateTime.now().toIso8601String(),
     };
     
+    // Store emergency message in sender's history for each connected device
+    final emergencyMessage = MessageModel(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      senderId: _localDeviceId ?? 'me',
+      text: '🚨 EMERGENCY: $alertMessage',
+      timestamp: DateTime.now(),
+      isMe: true,
+      senderName: _localDeviceName,
+      isEmergency: true,
+    );
+    
+    // Store in history for each connected device (so it appears in sender's chat history)
+    for (final endpointId in _connectedDevices.keys) {
+      _messageHistory.putIfAbsent(endpointId, () => []);
+      _messageHistory[endpointId]!.add(emergencyMessage);
+      
+      // Notify stream if chat is open
+      _messageStreams[endpointId]?.add(emergencyMessage);
+    }
+    
     await broadcastData(alertData);
+    notifyListeners();
   }
 
   /// Handle received payload
@@ -405,14 +473,35 @@ Future<bool> _requestPermissions() async {
   void _handleHandshake(String endpointId, Map<String, dynamic> data) {
     // Update device info
     if (_connectedDevices.containsKey(endpointId)) {
+      final oldDevice = _connectedDevices[endpointId];
+      final newDeviceId = data['deviceId'] ?? endpointId;
+      
       _connectedDevices[endpointId] = DeviceModel(
-        id: data['deviceId'] ?? endpointId,
+        id: newDeviceId,
         name: data['deviceName'] ?? 'Unknown',
         status: 'Active',
         distance: 'Nearby',
         batteryLevel: data['batteryLevel'] ?? 100,
         endpointId: endpointId,
       );
+      
+      // If deviceId changed, merge message history
+      if (oldDevice != null && oldDevice.id != newDeviceId) {
+        // Merge messages from old deviceId to new deviceId (using endpointId as key)
+        if (_messageHistory.containsKey(oldDevice.id)) {
+          _messageHistory.putIfAbsent(endpointId, () => []);
+          final oldMessages = _messageHistory[oldDevice.id]!;
+          final existingIds = _messageHistory[endpointId]!.map((m) => m.id).toSet();
+          for (var msg in oldMessages) {
+            if (!existingIds.contains(msg.id)) {
+              _messageHistory[endpointId]!.add(msg);
+            }
+          }
+          // Sort by timestamp
+          _messageHistory[endpointId]!.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        }
+      }
+      
       notifyListeners();
     }
   }
@@ -439,8 +528,66 @@ Future<bool> _requestPermissions() async {
   }
   // load message history for a specific device
   List<MessageModel> getMessageHistory(String endpointId) {
-  return _messageHistory[endpointId] ?? [];
-}
+    return _messageHistory[endpointId] ?? [];
+  }
+  
+  /// Get message history for a device, checking multiple possible IDs
+  List<MessageModel> getMessageHistoryForDevice(String? endpointId, String? deviceId) {
+    final allMessages = <MessageModel>[];
+    final seenIds = <String>{};
+    
+    // Try endpointId first
+    if (endpointId != null) {
+      final messages = _messageHistory[endpointId] ?? [];
+      for (var msg in messages) {
+        if (!seenIds.contains(msg.id)) {
+          allMessages.add(msg);
+          seenIds.add(msg.id);
+        }
+      }
+    }
+    
+    // Try deviceId if different
+    if (deviceId != null && deviceId != endpointId) {
+      final messages = _messageHistory[deviceId] ?? [];
+      for (var msg in messages) {
+        if (!seenIds.contains(msg.id)) {
+          allMessages.add(msg);
+          seenIds.add(msg.id);
+        }
+      }
+    }
+    
+    // Also check all connected devices to find matching endpointId/deviceId
+    for (var device in _connectedDevices.values) {
+      if (device.endpointId == endpointId || device.id == deviceId) {
+        // Check if there are messages stored under the device's endpointId
+        if (device.endpointId != null && device.endpointId != endpointId) {
+          final messages = _messageHistory[device.endpointId!] ?? [];
+          for (var msg in messages) {
+            if (!seenIds.contains(msg.id)) {
+              allMessages.add(msg);
+              seenIds.add(msg.id);
+            }
+          }
+        }
+        // Check if there are messages stored under the device's id
+        if (device.id != deviceId && device.id != endpointId) {
+          final messages = _messageHistory[device.id] ?? [];
+          for (var msg in messages) {
+            if (!seenIds.contains(msg.id)) {
+              allMessages.add(msg);
+              seenIds.add(msg.id);
+            }
+          }
+        }
+      }
+    }
+    
+    // Sort by timestamp
+    allMessages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return allMessages;
+  }
 
 
   /// Handle emergency alert
@@ -458,7 +605,14 @@ Future<bool> _requestPermissions() async {
       isEmergency: true,
     );
     
+    // Store in history (important for when chat page opens later)
+    _messageHistory.putIfAbsent(endpointId, () => []);
+    _messageHistory[endpointId]!.add(message);
+    
+    // Notify stream if chat is open
     _messageStreams[endpointId]?.add(message);
+    
+    notifyListeners();
   }
 
   /// Get message stream for a specific device
