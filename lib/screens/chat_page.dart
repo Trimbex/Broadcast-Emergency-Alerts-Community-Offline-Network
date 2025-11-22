@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/voice_command_button.dart';
+import '../widgets/theme_toggle_button.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 import '../services/p2p_service.dart';
+import '../theme/beacon_colors.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -90,7 +92,6 @@ void _initializeChat() {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: const Color(0xFF898AC4),
         title: Row(
           children: [
             Stack(
@@ -99,8 +100,8 @@ void _initializeChat() {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                    gradient: LinearGradient(
+                      colors: BeaconColors.accentGradient(context),
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -122,7 +123,7 @@ void _initializeChat() {
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50),
+                      color: BeaconColors.success,
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
                     ),
@@ -137,9 +138,7 @@ void _initializeChat() {
                 children: [
                   Text(
                     _device?.name ?? 'User',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Colors.white,
                     ),
                   ),
@@ -149,7 +148,7 @@ void _initializeChat() {
                         width: 6,
                         height: 6,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF4CAF50),
+                          color: BeaconColors.success,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -182,13 +181,14 @@ void _initializeChat() {
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
             child: Icon(
               Icons.wifi,
-              color: Colors.white.withOpacity(0.8),
+              color: BeaconColors.textPrimary(context).withOpacity(0.8),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.white),
+            icon: const Icon(Icons.info_outline),
             onPressed: _showDeviceInfo,
           ),
+          const ThemeToggleButton(isCompact: true),
         ],
       ),
       body: Column(
@@ -205,7 +205,7 @@ void _initializeChat() {
                 return Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(8),
-                  color: Colors.orange,
+                  color: BeaconColors.warning,
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -233,23 +233,17 @@ void _initializeChat() {
                         Icon(
                           Icons.chat_bubble_outline,
                           size: 64,
-                          color: Colors.grey[300],
+                          color: BeaconColors.textSecondary(context),
                         ),
                         const SizedBox(height: 16),
                         Text(
                           'No messages yet',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 16,
-                          ),
+                          style: Theme.of(context).textTheme.bodyLarge,
                         ),
                         const SizedBox(height: 8),
                         Text(
                           'Start the conversation!',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 13,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
                     ),
@@ -268,9 +262,9 @@ void _initializeChat() {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: BeaconColors.surface(context),
               border: Border(
-                top: BorderSide(color: Colors.grey[200]!),
+                top: BorderSide(color: BeaconColors.border(context)),
               ),
             ),
             child: Row(
@@ -287,10 +281,10 @@ void _initializeChat() {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: BeaconColors.surface(context),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.2),
+                  color: Colors.black.withOpacity(0.3),
                   spreadRadius: 1,
                   blurRadius: 5,
                 ),
@@ -319,7 +313,7 @@ void _initializeChat() {
                 const SizedBox(width: 8),
                 FloatingActionButton(
                   mini: true,
-                  backgroundColor: const Color(0xFF898AC4),
+                  backgroundColor: BeaconColors.primary,
                   onPressed: _sendMessage,
                   child: const Icon(Icons.send, color: Colors.white),
                 ),
@@ -359,7 +353,7 @@ void _initializeChat() {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: BeaconColors.error,
           ),
         );
       }
@@ -378,15 +372,15 @@ void _initializeChat() {
         decoration: BoxDecoration(
           gradient: message.isMe
               ? const LinearGradient(
-                  colors: [Color(0xFF898AC4), Color(0xFFB5B6E0)],
+                  colors: BeaconColors.darkAccentGradient,
                 )
-              : null,
+              : null, 
           color: message.isMe
               ? null
-              : (message.isEmergency ? Colors.red[50] : Colors.grey[100]),
+                        : (message.isEmergency ? BeaconColors.error.withOpacity(0.2) : BeaconColors.surface(context)),
           borderRadius: BorderRadius.circular(20),
           border: message.isEmergency
-              ? Border.all(color: Colors.red, width: 2)
+              ? Border.all(color: BeaconColors.error, width: 2)
               : null,
         ),
         child: Column(
@@ -395,21 +389,21 @@ void _initializeChat() {
             if (!message.isMe && message.senderName != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  message.senderName!,
-                  style: TextStyle(
-                    color: message.isEmergency ? Colors.red[900] : Colors.grey[600],
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                child:                   Text(
+                    message.senderName!,
+                    style: TextStyle(
+                      color: message.isEmergency ? BeaconColors.error : BeaconColors.textSecondary(context),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
               ),
             Text(
               message.text,
               style: TextStyle(
                 color: message.isMe
                     ? Colors.white
-                    : (message.isEmergency ? Colors.red[900] : Colors.black87),
+                    : (message.isEmergency ? BeaconColors.error : BeaconColors.textPrimary(context)),
                 fontSize: 15,
                 fontWeight: message.isEmergency ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -418,15 +412,15 @@ void _initializeChat() {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _formatTime(message.timestamp),
-                  style: TextStyle(
-                    color: message.isMe
-                        ? Colors.white.withValues(alpha: 0.8)
-                        : Colors.black54,
-                    fontSize: 11,
+                  Text(
+                    _formatTime(message.timestamp),
+                    style: TextStyle(
+                      color: message.isMe
+                          ? Colors.white.withOpacity(0.8)
+                          : BeaconColors.textSecondary(context),
+                      fontSize: 11,
+                    ),
                   ),
-                ),
                 if (message.isMe) ...[
                   const SizedBox(width: 4),
                   Icon(
@@ -450,13 +444,13 @@ void _initializeChat() {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: isEmergency
-              ? Colors.red[50]
-              : const Color(0xFF898AC4).withValues(alpha: 0.1),
+              ? BeaconColors.error.withOpacity(0.2)
+              : BeaconColors.primary.withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isEmergency
-                ? Colors.red
-                : const Color(0xFF898AC4).withValues(alpha: 0.3),
+                ? BeaconColors.error
+                : BeaconColors.primary.withOpacity(0.3),
           ),
         ),
         child: Row(
@@ -465,13 +459,13 @@ void _initializeChat() {
             Icon(
               icon,
               size: 16,
-              color: isEmergency ? Colors.red : const Color(0xFF898AC4),
+              color: isEmergency ? BeaconColors.error : BeaconColors.primary,
             ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
-                color: isEmergency ? Colors.red : const Color(0xFF898AC4),
+                color: isEmergency ? BeaconColors.error : BeaconColors.primary,
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
               ),
@@ -512,7 +506,7 @@ void _initializeChat() {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: BeaconColors.error,
           ),
         );
       }
@@ -562,10 +556,7 @@ void _initializeChat() {
         ),
         Text(
           value,
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontSize: 14,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium,
         ),
       ],
     );

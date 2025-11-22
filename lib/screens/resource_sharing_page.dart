@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/voice_command_button.dart';
+import '../widgets/theme_toggle_button.dart';
 import '../models/resource_model.dart';
 import '../services/p2p_service.dart';
+import '../theme/beacon_colors.dart';
 
 class ResourceSharingPage extends StatefulWidget {
   const ResourceSharingPage({super.key});
@@ -70,6 +72,10 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Resource Sharing'),
+        actions: const [
+          ThemeToggleButton(isCompact: true),
+          SizedBox(width: 8),
+        ],
       ),
       body: _buildResourcesView(p2pService, filteredResources),
     );
@@ -82,24 +88,20 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   }) {
     return Column(
       children: [
-        Icon(icon, size: 24, color: const Color(0xFF1976D2)),
+        Icon(icon, size: 24, color: BeaconColors.primary),
         const SizedBox(height: 6),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
-            color: Color(0xFF1976D2),
+            color: BeaconColors.primary,
           ),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w400,
-            color: Colors.grey[600],
-          ),
+          style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
     );
@@ -109,8 +111,8 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
     final p2pService = Provider.of<P2PService>(context, listen: false);
     final IconData categoryIcon = _getCategoryIcon(resource.category);
     final Color statusColor = resource.status == 'Available' 
-        ? const Color(0xFF4CAF50) 
-        : const Color(0xFFFF9800);
+        ? BeaconColors.success 
+        : BeaconColors.warning;
     
     // Check if resource is from network (another device) or local
     final isFromNetwork = resource.deviceId != null && 
@@ -128,8 +130,8 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                    gradient: LinearGradient(
+                      colors: BeaconColors.accentGradient(context),
                     ),
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -158,10 +160,10 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.blue[50],
+                                color: BeaconColors.secondary.withOpacity(0.2),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: Colors.blue[200]!,
+                                  color: BeaconColors.secondary,
                                   width: 1,
                                 ),
                               ),
@@ -171,13 +173,13 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                                   Icon(
                                     Icons.network_check,
                                     size: 12,
-                                    color: Colors.blue[700],
+                                    color: BeaconColors.secondary,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
                                     'Network',
                                     style: TextStyle(
-                                      color: Colors.blue[700],
+                                      color: BeaconColors.secondary,
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -196,10 +198,10 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: statusColor.withValues(alpha: 0.15),
+                              color: statusColor.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: statusColor.withValues(alpha: 0.3),
+                                color: statusColor.withOpacity(0.3),
                               ),
                             ),
                             child: Text(
@@ -218,16 +220,12 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.grey[100],
+                              color: BeaconColors.surface(context),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
                               'Qty: ${resource.quantity}',
-                              style: TextStyle(
-                                color: Colors.grey[700],
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ),
                         ],
@@ -240,15 +238,12 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
             const SizedBox(height: 14),
             Row(
               children: [
-                Icon(Icons.location_on, size: 16, color: Colors.grey[500]),
+                Icon(Icons.location_on, size: 16, color: BeaconColors.textSecondary(context)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     resource.location,
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                      fontSize: 13,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
               ],
@@ -256,14 +251,11 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.person, size: 16, color: Colors.grey[500]),
+                Icon(Icons.person, size: 16, color: BeaconColors.textSecondary(context)),
                 const SizedBox(width: 6),
                 Text(
                   'Provided by ${resource.provider}',
-                  style: TextStyle(
-                    color: Colors.grey[700],
-                    fontSize: 13,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
@@ -276,7 +268,6 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 child: ElevatedButton(
                   onPressed: () => _requestResource(resource, p2pService),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1976D2),
                     foregroundColor: Colors.white,
                   ),
                   child: const Text(
@@ -289,21 +280,17 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[200],
+                  color: BeaconColors.surface(context),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.grey[600]),
+                    Icon(Icons.info_outline, size: 18, color: BeaconColors.textSecondary(context)),
                     const SizedBox(width: 8),
                     Text(
                       'Your Resource',
-                      style: TextStyle(
-                        color: Colors.grey[700],
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
                 ),
@@ -338,8 +325,8 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                       _selectedCategory = category;
                     });
                   },
-                  backgroundColor: Colors.grey[200],
-                  selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                  backgroundColor: BeaconColors.surface(context),
+                  selectedColor: BeaconColors.primary.withOpacity(0.2),
                 ),
               );
             },
@@ -350,10 +337,10 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: BeaconColors.surface(context),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
+                color: Colors.black.withOpacity(0.3),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -370,7 +357,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               Container(
                 width: 1,
                 height: 40,
-                color: Colors.grey[300],
+                color: BeaconColors.border(context),
               ),
               _buildStatItem(
                 icon: Icons.check_circle,
@@ -380,7 +367,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               Container(
                 width: 1,
                 height: 40,
-                color: Colors.grey[300],
+                color: BeaconColors.border(context),
               ),
               _buildStatItem(
                 icon: Icons.people,
@@ -398,16 +385,16 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
+                      Icon(Icons.inventory_2_outlined, size: 64, color: BeaconColors.textSecondary(context)),
                       const SizedBox(height: 16),
                       Text(
                         'No resources available',
-                        style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                        style: Theme.of(context).textTheme.bodyLarge,
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Tap the people icon to request resources from connected devices',
-                        style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                        style: Theme.of(context).textTheme.bodySmall,
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -426,10 +413,10 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: BeaconColors.surface(context),
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.withValues(alpha: 0.2),
+                color: Colors.black.withOpacity(0.3),
                 spreadRadius: 1,
                 blurRadius: 5,
               ),
@@ -488,7 +475,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Device not found. Please ensure the device is connected.'),
-          backgroundColor: Colors.red,
+          backgroundColor: BeaconColors.error,
         ),
       );
       return;
@@ -531,7 +518,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Please enter a valid quantity'),
-                      backgroundColor: Colors.red,
+                      backgroundColor: BeaconColors.error,
                     ),
                   );
                   return;
@@ -540,7 +527,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Quantity cannot exceed ${resource.quantity}'),
-                      backgroundColor: Colors.red,
+                      backgroundColor: BeaconColors.error,
                     ),
                   );
                   return;
@@ -559,7 +546,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Request sent for ${resource.name} (Qty: $requestedQty)'),
-                    backgroundColor: Colors.green,
+                    backgroundColor: BeaconColors.success,
                   ),
                 );
               },
@@ -595,7 +582,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Request sent for ${resource.name}'),
-                    backgroundColor: Colors.green,
+                    backgroundColor: BeaconColors.success,
                   ),
                 );
               },
@@ -645,7 +632,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Request denied'),
-                  backgroundColor: Colors.orange,
+                  backgroundColor: BeaconColors.warning,
                 ),
               );
             },
@@ -665,12 +652,12 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('Request approved! ${resource.name} provided to $requesterName'),
-                  backgroundColor: Colors.green,
+                  backgroundColor: BeaconColors.success,
                 ),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
+              backgroundColor: BeaconColors.success,
             ),
             child: const Text('Approve'),
           ),
@@ -752,7 +739,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('Please fill all fields'),
-                    backgroundColor: Colors.red,
+                    backgroundColor: BeaconColors.error,
                   ),
                 );
                 return;
@@ -763,7 +750,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
                   const SnackBar(
                     content: Text('Please enter a valid quantity'),
-                    backgroundColor: Colors.red,
+                    backgroundColor: BeaconColors.error,
                   ),
                 );
                 return;
@@ -786,7 +773,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Resource shared successfully'),
-                  backgroundColor: Colors.green,
+                  backgroundColor: BeaconColors.success,
                 ),
               );
             },

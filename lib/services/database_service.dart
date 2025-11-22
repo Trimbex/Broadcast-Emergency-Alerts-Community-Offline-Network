@@ -22,9 +22,40 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
+  }
+
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add new columns to user_profile table
+      try {
+        await db.execute('ALTER TABLE user_profile ADD COLUMN phone TEXT');
+        await db.execute('ALTER TABLE user_profile ADD COLUMN blood_type TEXT');
+        await db.execute('ALTER TABLE user_profile ADD COLUMN medical_conditions TEXT');
+      } catch (e) {
+        // Columns might already exist, ignore error
+      }
+
+      // Create emergency_contacts table if it doesn't exist
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS emergency_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          )
+        ''');
+      } catch (e) {
+        // Table might already exist, ignore error
+      }
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -34,7 +65,23 @@ class DatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
         role TEXT,
+        phone TEXT,
+        blood_type TEXT,
+        medical_conditions TEXT,
         device_id TEXT UNIQUE NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+
+    // Emergency Contacts Table
+    await db.execute('''
+      CREATE TABLE emergency_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        relation TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        device_id TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       )
@@ -75,30 +122,37 @@ class DatabaseService {
 
   // --- User Profile Operations ---
 
-  Future<void> saveUserProfile(String name, String role, String deviceId) async {
+  Future<void> saveUserProfile({
+    required String name,
+    String? role,
+    required String deviceId,
+    String? phone,
+    String? bloodType,
+    String? medicalConditions,
+  }) async {
     final db = await instance.database;
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // Check if profile exists
     final result = await db.query('user_profile');
     
+    final data = {
+      'name': name,
+      'role': role ?? '',
+      'phone': phone ?? '',
+      'blood_type': bloodType ?? '',
+      'medical_conditions': medicalConditions ?? '',
+      'device_id': deviceId,
+      'updated_at': now,
+    };
+    
     if (result.isEmpty) {
-      await db.insert('user_profile', {
-        'name': name,
-        'role': role,
-        'device_id': deviceId,
-        'created_at': now,
-        'updated_at': now,
-      });
+      data['created_at'] = now;
+      await db.insert('user_profile', data);
     } else {
       await db.update(
         'user_profile',
-        {
-          'name': name,
-          'role': role,
-          'device_id': deviceId,
-          'updated_at': now,
-        },
+        data,
         where: 'id = ?',
         whereArgs: [result.first['id']],
       );
@@ -112,6 +166,69 @@ class DatabaseService {
       return result.first;
     }
     return null;
+  }
+
+  // --- Emergency Contacts Operations ---
+
+  Future<void> saveEmergencyContact({
+    required String name,
+    required String relation,
+    required String phone,
+    required String deviceId,
+  }) async {
+    final db = await instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.insert('emergency_contacts', {
+      'name': name,
+      'relation': relation,
+      'phone': phone,
+      'device_id': deviceId,
+      'created_at': now,
+      'updated_at': now,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getEmergencyContacts(String deviceId) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'emergency_contacts',
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+      orderBy: 'created_at ASC',
+    );
+    return result;
+  }
+
+  Future<void> updateEmergencyContact({
+    required int id,
+    required String name,
+    required String relation,
+    required String phone,
+  }) async {
+    final db = await instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    await db.update(
+      'emergency_contacts',
+      {
+        'name': name,
+        'relation': relation,
+        'phone': phone,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<void> deleteEmergencyContact(int id) async {
+    final db = await instance.database;
+    await db.delete(
+      'emergency_contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // --- Message Operations ---

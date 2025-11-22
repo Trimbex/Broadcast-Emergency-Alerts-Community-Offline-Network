@@ -1,5 +1,11 @@
- import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../widgets/voice_command_button.dart';
+import '../widgets/theme_toggle_button.dart';
+import '../theme/beacon_colors.dart';
+import '../services/theme_service.dart';
+import '../services/database_service.dart';
+import '../services/p2p_service.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -9,15 +15,63 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final TextEditingController _nameController = TextEditingController(text: 'John Doe');
-  final TextEditingController _phoneController = TextEditingController(text: '+1 234 567 8900');
-  final TextEditingController _bloodTypeController = TextEditingController(text: 'O+');
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _bloodTypeController = TextEditingController();
   final TextEditingController _medicalConditionsController = TextEditingController();
 
-  final List<EmergencyContact> _emergencyContacts = [
-    EmergencyContact(name: 'Jane Doe', relation: 'Spouse', phone: '+1 234 567 8901'),
-    EmergencyContact(name: 'Dr. Smith', relation: 'Doctor', phone: '+1 234 567 8902'),
-  ];
+  List<EmergencyContact> _emergencyContacts = [];
+  bool _isLoading = true;
+  String? _deviceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfileData();
+  }
+
+  Future<void> _loadProfileData() async {
+    setState(() => _isLoading = true);
+
+    try {
+      // Get device ID from P2P service or generate one
+      final p2pService = Provider.of<P2PService>(context, listen: false);
+      _deviceId = p2pService.localDeviceId ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+      // Load user profile
+      final profile = await DatabaseService.instance.getUserProfile();
+      if (profile != null) {
+        _nameController.text = profile['name']?.toString() ?? '';
+        _phoneController.text = profile['phone']?.toString() ?? '';
+        _bloodTypeController.text = profile['blood_type']?.toString() ?? '';
+        _medicalConditionsController.text = profile['medical_conditions']?.toString() ?? '';
+      }
+
+      // Load emergency contacts
+      if (_deviceId != null) {
+        final contacts = await DatabaseService.instance.getEmergencyContacts(_deviceId!);
+        _emergencyContacts = contacts.map((contact) => EmergencyContact(
+          id: contact['id'] as int,
+          name: contact['name'] as String,
+          relation: contact['relation'] as String,
+          phone: contact['phone'] as String,
+        )).toList();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading profile: $e'),
+            backgroundColor: BeaconColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -30,10 +84,25 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Profile & Emergency Contacts'),
+          actions: const [
+            ThemeToggleButton(isCompact: true),
+          ],
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile & Emergency Contacts'),
         actions: [
+          const ThemeToggleButton(isCompact: true),
           IconButton(
             icon: const Icon(Icons.save),
             onPressed: _saveProfile,
@@ -47,14 +116,11 @@ class _ProfilePageState extends State<ProfilePage> {
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(32),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF898AC4),
-                    Color.fromARGB(255, 172, 172, 223),
-                  ],
+                  colors: BeaconColors.accentGradient(context),
                 ),
               ),
               child: Column(
@@ -72,13 +138,13 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                           ],
                         ),
-                        child: const CircleAvatar(
+                        child: CircleAvatar(
                           radius: 50,
-                          backgroundColor: Colors.white,
+                          backgroundColor: BeaconColors.surface(context),
                           child: Icon(
                             Icons.person,
                             size: 50,
-                            color: Color(0xFF1976D2),
+                            color: BeaconColors.primary,
                           ),
                         ),
                       ),
@@ -87,7 +153,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         right: 0,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: BeaconColors.surface(context),
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
@@ -101,7 +167,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             icon: const Icon(
                               Icons.camera_alt,
                               size: 18,
-                              color: Color(0xFF1976D2),
+                              color: BeaconColors.primary,
                             ),
                             onPressed: () {
                               // Upload photo functionality
@@ -112,12 +178,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Emergency Profile',
-                    style: TextStyle(
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -131,12 +195,10 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Personal Information',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1976D2),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: BeaconColors.primary,
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -192,12 +254,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Emergency Contacts',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1976D2),
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: BeaconColors.primary,
                         ),
                       ),
                       ElevatedButton.icon(
@@ -228,15 +288,31 @@ class _ProfilePageState extends State<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Settings',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1976D2),
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: BeaconColors.primary,
                     ),
                   ),
                   const SizedBox(height: 16),
+                  Consumer<ThemeService>(
+                    builder: (context, themeService, child) {
+                      return SwitchListTile(
+                        title: const Text('Dark Mode'),
+                        subtitle: Text(
+                          themeService.themeMode == ThemeMode.system
+                              ? 'Following system settings'
+                              : themeService.themeMode == ThemeMode.dark
+                                  ? 'Dark mode enabled'
+                                  : 'Light mode enabled',
+                        ),
+                        value: themeService.isDarkMode,
+                        onChanged: (value) {
+                          themeService.toggleTheme();
+                        },
+                      );
+                    },
+                  ),
                   SwitchListTile(
                     title: const Text('Enable Voice Commands'),
                     subtitle: const Text('Use voice for hands-free operation'),
@@ -288,8 +364,8 @@ class _ProfilePageState extends State<ProfilePage> {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
+                gradient: LinearGradient(
+                  colors: BeaconColors.accentGradient(context),
                 ),
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -319,30 +395,24 @@ class _ProfilePageState extends State<ProfilePage> {
                   const SizedBox(height: 4),
                   Text(
                     contact.relation,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     contact.phone,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey[600],
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
               ),
             ),
             IconButton(
               icon: const Icon(Icons.edit, size: 20),
-              color: const Color(0xFF1976D2),
+              color: BeaconColors.primary,
               onPressed: () => _editEmergencyContact(index),
             ),
             IconButton(
               icon: const Icon(Icons.delete, size: 20),
-              color: Colors.red[400],
+              color: BeaconColors.error,
               onPressed: () => _deleteEmergencyContact(index),
             ),
           ],
@@ -351,16 +421,53 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _saveProfile() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Profile saved successfully'),
-        backgroundColor: Colors.green,
-      ),
-    );
+  Future<void> _saveProfile() async {
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter your name'),
+          backgroundColor: BeaconColors.error,
+        ),
+      );
+      return;
+    }
+
+    try {
+      // Get device ID
+      final p2pService = Provider.of<P2PService>(context, listen: false);
+      final deviceId = p2pService.localDeviceId ?? _deviceId ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+      // Save user profile
+      await DatabaseService.instance.saveUserProfile(
+        name: _nameController.text.trim(),
+        role: '', // Can be extended later
+        deviceId: deviceId,
+        phone: _phoneController.text.trim(),
+        bloodType: _bloodTypeController.text.trim(),
+        medicalConditions: _medicalConditionsController.text.trim(),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile saved successfully'),
+            backgroundColor: BeaconColors.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving profile: $e'),
+            backgroundColor: BeaconColors.error,
+          ),
+        );
+      }
+    }
   }
 
-  void _addEmergencyContact() {
+  Future<void> _addEmergencyContact() async {
     final nameController = TextEditingController();
     final relationController = TextEditingController();
     final phoneController = TextEditingController();
@@ -403,17 +510,42 @@ class _ProfilePageState extends State<ProfilePage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _emergencyContacts.add(
-                  EmergencyContact(
-                    name: nameController.text,
-                    relation: relationController.text,
-                    phone: phoneController.text,
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty ||
+                  relationController.text.trim().isEmpty ||
+                  phoneController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill all fields'),
+                    backgroundColor: BeaconColors.error,
                   ),
                 );
-              });
-              Navigator.pop(context);
+                return;
+              }
+
+              try {
+                final p2pService = Provider.of<P2PService>(context, listen: false);
+                final deviceId = p2pService.localDeviceId ?? _deviceId ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+                await DatabaseService.instance.saveEmergencyContact(
+                  name: nameController.text.trim(),
+                  relation: relationController.text.trim(),
+                  phone: phoneController.text.trim(),
+                  deviceId: deviceId,
+                );
+
+                Navigator.pop(context);
+                await _loadProfileData(); // Reload to get the new contact with ID
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error adding contact: $e'),
+                      backgroundColor: BeaconColors.error,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Add'),
           ),
@@ -422,7 +554,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _editEmergencyContact(int index) {
+  Future<void> _editEmergencyContact(int index) async {
     final contact = _emergencyContacts[index];
     final nameController = TextEditingController(text: contact.name);
     final relationController = TextEditingController(text: contact.relation);
@@ -466,15 +598,39 @@ class _ProfilePageState extends State<ProfilePage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _emergencyContacts[index] = EmergencyContact(
-                  name: nameController.text,
-                  relation: relationController.text,
-                  phone: phoneController.text,
+            onPressed: () async {
+              if (nameController.text.trim().isEmpty ||
+                  relationController.text.trim().isEmpty ||
+                  phoneController.text.trim().isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please fill all fields'),
+                    backgroundColor: BeaconColors.error,
+                  ),
                 );
-              });
-              Navigator.pop(context);
+                return;
+              }
+
+              try {
+                await DatabaseService.instance.updateEmergencyContact(
+                  id: contact.id!,
+                  name: nameController.text.trim(),
+                  relation: relationController.text.trim(),
+                  phone: phoneController.text.trim(),
+                );
+
+                Navigator.pop(context);
+                await _loadProfileData(); // Reload to refresh the list
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error updating contact: $e'),
+                      backgroundColor: BeaconColors.error,
+                    ),
+                  );
+                }
+              }
             },
             child: const Text('Save'),
           ),
@@ -483,7 +639,9 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  void _deleteEmergencyContact(int index) {
+  Future<void> _deleteEmergencyContact(int index) async {
+    final contact = _emergencyContacts[index];
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -495,13 +653,26 @@ class _ProfilePageState extends State<ProfilePage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _emergencyContacts.removeAt(index);
-              });
-              Navigator.pop(context);
+            onPressed: () async {
+              try {
+                if (contact.id != null) {
+                  await DatabaseService.instance.deleteEmergencyContact(contact.id!);
+                }
+                
+                Navigator.pop(context);
+                await _loadProfileData(); // Reload to refresh the list
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error deleting contact: $e'),
+                      backgroundColor: BeaconColors.error,
+                    ),
+                  );
+                }
+              }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: BeaconColors.error),
             child: const Text('Delete'),
           ),
         ],
@@ -511,11 +682,13 @@ class _ProfilePageState extends State<ProfilePage> {
 }
 
 class EmergencyContact {
+  final int? id;
   final String name;
   final String relation;
   final String phone;
 
   EmergencyContact({
+    this.id,
     required this.name,
     required this.relation,
     required this.phone,
