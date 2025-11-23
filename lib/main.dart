@@ -7,9 +7,20 @@ import 'screens/profile_page.dart';
 import 'screens/network_dashboard.dart';
 import 'services/p2p_service.dart';
 import 'services/theme_service.dart';
+import 'services/notification_service.dart';
 import 'theme/beacon_theme.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize notification service (non-blocking - app continues even if it fails)
+  try {
+    await NotificationService.instance.initialize();
+  } catch (e) {
+    debugPrint('⚠️ Failed to initialize notifications: $e');
+    // Continue app startup even if notifications fail
+  }
+  
   runApp(const MyApp());
 }
 

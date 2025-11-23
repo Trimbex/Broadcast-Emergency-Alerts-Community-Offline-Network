@@ -11,6 +11,7 @@ import '../models/resource_model.dart';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'database_service.dart';
+import 'notification_service.dart';
 
 /// P2P Communication Service using Nearby Connections API
 /// 
@@ -79,8 +80,14 @@ class P2PService extends ChangeNotifier {
       _localDeviceId = DateTime.now().millisecondsSinceEpoch.toString();
     }
     
+    // Initialize notification service
+    await NotificationService.instance.initialize();
+    
     // Load local resources from database
     await _loadLocalResources();
+    
+    // Load message history from database
+    await _loadAllMessageHistory();
     
     // Request permissions
     final hasPermissions = await _requestPermissions();
@@ -94,6 +101,44 @@ class P2PService extends ChangeNotifier {
     
     debugPrint('✅ P2P: Initialized for user: $userName (ID: $_localDeviceId)');
     return true;
+  }
+
+  /// Load all message history from database
+  Future<void> _loadAllMessageHistory() async {
+    if (_localDeviceId == null) return;
+    
+    try {
+      // Get all unique conversation IDs from database
+      final db = await DatabaseService.instance.database;
+      final conversations = await db.query(
+        'messages',
+        columns: ['DISTINCT conversation_id'],
+      );
+      
+      for (var conv in conversations) {
+        final conversationId = conv['conversation_id'] as String;
+        final messages = await DatabaseService.instance.getMessages(conversationId);
+        
+        if (messages.isNotEmpty) {
+          // Store messages under conversation ID
+          _messageHistory[conversationId] = messages;
+          
+          // Also try to map to endpointId if we have connected devices
+          for (var device in _connectedDevices.values) {
+            if (device.id == conversationId || device.endpointId == conversationId) {
+              if (device.endpointId != null) {
+                _messageHistory[device.endpointId!] = messages;
+              }
+              _messageHistory[device.id] = messages;
+            }
+          }
+        }
+      }
+      
+      debugPrint('📚 P2P: Loaded ${_messageHistory.length} conversation histories from database');
+    } catch (e) {
+      debugPrint('❌ P2P: Failed to load message history: $e');
+    }
   }
 
   Future<void> _loadLocalResources() async {
@@ -560,12 +605,26 @@ Future<bool> _requestPermissions() async {
      // 1. Store history
     _messageHistory.putIfAbsent(endpointId, () => []);
     _messageHistory[endpointId]!.add(message);
+    
+    // Also store under senderId for persistence
+    _messageHistory.putIfAbsent(senderId, () => []);
+    if (!_messageHistory[senderId]!.any((m) => m.id == message.id)) {
+      _messageHistory[senderId]!.add(message);
+    }
 
     // Persist to database
     // Prefer senderId (persistent) as conversation_id for incoming messages
     DatabaseService.instance.saveMessage(message, senderId);
 
-    // 2. Notify stream if chat open
+    // 2. Show notification
+    NotificationService.instance.showMessageNotification(
+      senderName: message.senderName ?? 'Unknown',
+      message: message.text,
+      isEmergency: false,
+      payload: 'chat_$endpointId',
+    );
+
+    // 3. Notify stream if chat open
     _messageStreams[endpointId]?.add(message);
 
     notifyListeners();
@@ -668,11 +727,12 @@ Future<bool> _requestPermissions() async {
     debugPrint('🚨 EMERGENCY ALERT from ${data['senderName']}: ${data['alert']}');
     
     final senderId = data['senderId'] ?? endpointId;
+    final alertText = data['alert'] ?? '';
     // Create emergency message
     final message = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       senderId: senderId,
-      text: '🚨 EMERGENCY: ${data['alert']}',
+      text: '🚨 EMERGENCY: $alertText',
       timestamp: DateTime.parse(data['timestamp'] ?? DateTime.now().toIso8601String()),
       isMe: false,
       senderName: data['senderName'],
@@ -683,8 +743,22 @@ Future<bool> _requestPermissions() async {
     _messageHistory.putIfAbsent(endpointId, () => []);
     _messageHistory[endpointId]!.add(message);
     
+    // Also store under senderId
+    _messageHistory.putIfAbsent(senderId, () => []);
+    if (!_messageHistory[senderId]!.any((m) => m.id == message.id)) {
+      _messageHistory[senderId]!.add(message);
+    }
+    
     // Persist to DB
     DatabaseService.instance.saveMessage(message, senderId);
+
+    // Show high-priority notification for emergency
+    NotificationService.instance.showMessageNotification(
+      senderName: message.senderName ?? 'Unknown',
+      message: alertText,
+      isEmergency: true,
+      payload: 'emergency_$endpointId',
+    );
 
     // Notify stream if chat is open
     _messageStreams[endpointId]?.add(message);
@@ -805,6 +879,17 @@ Future<bool> _requestPermissions() async {
     if (localResources.isNotEmpty) {
       _sendResourceList(endpointId, localResources);
     }
+    
+    // Get requester name from device if available
+    final requesterName = _connectedDevices[endpointId]?.name ?? 'Unknown';
+    
+    // Show notification
+    NotificationService.instance.showResourceRequestNotification(
+      requesterName: requesterName,
+      resourceName: 'All Resources',
+      resourceCategory: 'Multiple',
+      payload: 'resource_request_$endpointId',
+    );
   }
 
   /// Handle resource list (multiple resources at once)
@@ -900,6 +985,14 @@ Future<bool> _requestPermissions() async {
     final resource = _networkResources[resourceKey];
     
     if (resource != null) {
+      // Show notification
+      NotificationService.instance.showResourceRequestNotification(
+        requesterName: requesterName,
+        resourceName: resource.name,
+        resourceCategory: resource.category,
+        payload: 'resource_request_$resourceId',
+      );
+      
       // Notify UI about the request
       _resourceRequestStreamController.add({
         'resourceId': resourceId,

@@ -3,12 +3,12 @@ import 'package:provider/provider.dart';
 import '../services/database_service.dart';
 import '../widgets/common/theme_toggle_button.dart';
 import '../widgets/network_dashboard/device_card.dart';
-import '../widgets/network_dashboard/status_item.dart';
-import '../models/device_model.dart';
+import '../widgets/network_dashboard/network_status_indicator.dart';
+import '../widgets/network_dashboard/empty_network_state.dart';
+import '../widgets/network_dashboard/network_stats_header.dart';
+import '../widgets/network_dashboard/quick_actions_bar.dart';
 import '../services/p2p_service.dart';
 import '../theme/beacon_colors.dart';
-import 'resource_sharing_page.dart';
-import 'chat_page.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -18,7 +18,8 @@ class NetworkDashboard extends StatefulWidget {
 }
 
 class _NetworkDashboardState extends State<NetworkDashboard> {
-  bool _isInitialized = false;
+  NetworkState _networkState = NetworkState.initializing;
+  bool _isRefreshing = false;
 
   final List<String> _predefinedMessages = [
     'Need immediate help',
@@ -31,50 +32,97 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   @override
   void initState() {
     super.initState();
-    _initializeP2P();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeP2P();
+    });
   }
 
   Future<void> _initializeP2P() async {
-    final p2pService = Provider.of<P2PService>(context, listen: false);
-    
-    // Initialize with saved user name or default
-    final userName = await _getUserName();
-    final success = await p2pService.initialize(userName);
-    
-    if (success) {
-      // Start both advertising and discovery for mesh network
-      await p2pService.startAdvertising();
-      await p2pService.startDiscovery();
-      
+    if (!mounted) return;
+
+    setState(() {
+      _networkState = NetworkState.initializing;
+    });
+
+    try {
+      final p2pService = Provider.of<P2PService>(context, listen: false);
+
+      // Initialize with saved user name or default
+      final userName = await _getUserName();
+      final success = await p2pService.initialize(userName);
+
+      if (!mounted) return;
+
+      if (success) {
+        // Start both advertising and discovery for mesh network
+        final advertisingSuccess = await p2pService.startAdvertising();
+        final discoverySuccess = await p2pService.startDiscovery();
+
+        if (!mounted) return;
+
+        if (advertisingSuccess && discoverySuccess) {
+          setState(() {
+            _networkState = NetworkState.searching;
+          });
+
+          _showSuccessMessage('📡 Network Active - Searching for nearby devices...');
+        } else {
+          setState(() {
+            _networkState = NetworkState.error;
+          });
+          _showErrorMessage('Failed to start network services');
+        }
+      } else {
+        setState(() {
+          _networkState = NetworkState.error;
+        });
+        _showErrorMessage('Failed to initialize P2P network. Check permissions.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        _isInitialized = true;
+        _networkState = NetworkState.error;
       });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📡 P2P Network Active - Searching for nearby devices...'),
-            backgroundColor: BeaconColors.success,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ Failed to start P2P network. Check permissions.'),
-            backgroundColor: BeaconColors.error,
-          ),
-        );
-      }
+      _showErrorMessage('Error: ${e.toString()}');
     }
   }
 
   Future<String> _getUserName() async {
-    // Get from Database (set in identity setup)
-    final userProfile = await DatabaseService.instance.getUserProfile();
-    return userProfile?['name'] ?? 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    try {
+      final userProfile = await DatabaseService.instance.getUserProfile();
+      return userProfile?['name'] ??
+          'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    } catch (e) {
+      return 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    }
+  }
+
+  void _showSuccessMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: BeaconColors.success,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: BeaconColors.error,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: _initializeP2P,
+        ),
+      ),
+    );
   }
 
   @override
@@ -92,55 +140,54 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     return Consumer<P2PService>(
       builder: (context, p2pService, child) {
         final connectedDevices = p2pService.connectedDevices;
-        
+        final isNetworkActive =
+            p2pService.isAdvertising && p2pService.isDiscovering;
+
+        // Update state based on network status
+        if (_networkState == NetworkState.searching && isNetworkActive) {
+          // Network is active, show devices or empty state
+        } else if (_networkState == NetworkState.searching && !isNetworkActive) {
+          // Network stopped, show error
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _networkState = NetworkState.error;
+              });
+              _showErrorMessage('Network connection lost');
+            }
+          });
+        }
+
         return Scaffold(
           appBar: AppBar(
             title: Text(
               mode == 'join' ? 'Emergency Network' : 'Your Network',
             ),
             actions: [
-              // P2P Status indicator
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: p2pService.isAdvertising && p2pService.isDiscovering
-                          ? BeaconColors.success
-                          : BeaconColors.warning,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          p2pService.isAdvertising && p2pService.isDiscovering
-                              ? Icons.wifi
-                              : Icons.wifi_off,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          p2pService.isAdvertising && p2pService.isDiscovering
-                              ? 'ACTIVE'
-                              : 'INACTIVE',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: NetworkStatusIndicator(isActive: isNetworkActive),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                onPressed: _refreshNetwork,
-              ),
+              if (_isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _isRefreshing ? null : _refreshNetwork,
+                  tooltip: 'Refresh Network',
+                ),
               const ThemeToggleButton(isCompact: true),
             ],
           ),
@@ -154,116 +201,24 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
             ),
             child: Column(
               children: [
-                // Header with stats
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                  decoration: BoxDecoration(
-                    color: BeaconColors.surface(context),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      StatusItem(
-                        icon: Icons.people,
-                        label: 'Connected',
-                        value: '${connectedDevices.length}',
-                        color: connectedDevices.isNotEmpty ? BeaconColors.success : BeaconColors.textSecondary(context),
-                      ),
-                      Container(width: 1, height: 40, color: BeaconColors.border(context)),
-                      StatusItem(
-                        icon: Icons.battery_std,
-                        label: 'Battery',
-                        value: '${p2pService.batteryLevel}%',
-                        color: p2pService.batteryLevel > 50 ? BeaconColors.success : BeaconColors.warning,
-                      ),
-                    ],
-                  ),
-                ),
+                // Stats Header
+                const NetworkStatsHeader(),
 
-                // Quick actions
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _showQuickMessageDialog,
-                          icon: const Icon(Icons.message),
-                          label: const Text('Quick Message'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => ResourceSharingPage()),
-                          ),
-                          icon: const Icon(Icons.inventory),
-                          label: const Text('Resources'),
-                        ),
-                      ),
-                    ],
+                // Quick Actions
+                if (isNetworkActive && connectedDevices.isNotEmpty)
+                  QuickActionsBar(
+                    onQuickMessage: _showQuickMessageDialog,
                   ),
-                ),
 
-                // Devices list or empty message
+                // Devices List or Empty State
                 Expanded(
-                  child: connectedDevices.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                             const Icon(
-                                Icons.search,
-                                size: 64,
-                              
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _isInitialized
-                                    ? 'Searching for nearby devices...'
-                                    : 'Initializing P2P network...',
-                                style: Theme.of(context).textTheme.bodyLarge,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Make sure both devices have\nBluetooth and Location enabled',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              const SizedBox(height: 24),
-                              if (_isInitialized)
-                                const CircularProgressIndicator(
-                                  color: BeaconColors.primary,
-                                ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: connectedDevices.length,
-                          itemBuilder: (context, index) {
-                            return DeviceCard(
-                              device: connectedDevices[index],
-                              p2pService: p2pService,
-                            );
-                          },
-                        ),
+                  child: _buildContent(
+                    context,
+                    p2pService,
+                    connectedDevices,
+                    isNetworkActive,
+                  ),
                 ),
-
               ],
             ),
           ),
@@ -272,21 +227,81 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     );
   }
 
+  Widget _buildContent(
+    BuildContext context,
+    P2PService p2pService,
+    List connectedDevices,
+    bool isNetworkActive,
+  ) {
+    // Show error state if initialization failed
+    if (_networkState == NetworkState.error) {
+      return EmptyNetworkState(
+        state: NetworkState.error,
+        onRetry: _initializeP2P,
+      );
+    }
 
-  void _refreshNetwork() async {
-    final p2pService = Provider.of<P2PService>(context, listen: false);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🔄 Refreshing network...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    // Show initializing state
+    if (_networkState == NetworkState.initializing) {
+      return const EmptyNetworkState(state: NetworkState.initializing);
+    }
 
-    // Restart discovery
-    await p2pService.stopDiscovery();
-    await Future.delayed(const Duration(milliseconds: 500));
-    await p2pService.startDiscovery();
+    // Show devices list if available
+    if (connectedDevices.isNotEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refreshNetwork,
+        color: BeaconColors.primary,
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: connectedDevices.length,
+          itemBuilder: (context, index) {
+            return DeviceCard(
+              device: connectedDevices[index],
+              p2pService: p2pService,
+            );
+          },
+        ),
+      );
+    }
+
+    // Show searching state
+    return const EmptyNetworkState(state: NetworkState.searching);
+  }
+
+
+  Future<void> _refreshNetwork() async {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final p2pService = Provider.of<P2PService>(context, listen: false);
+
+      // Restart discovery
+      await p2pService.stopDiscovery();
+      await Future.delayed(const Duration(milliseconds: 500));
+      final success = await p2pService.startDiscovery();
+
+      if (!mounted) return;
+
+      if (success) {
+        _showSuccessMessage('🔄 Network refreshed');
+      } else {
+        _showErrorMessage('Failed to refresh network');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorMessage('Error refreshing: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   void _showQuickMessageDialog() {
