@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../widgets/voice_command_button.dart';
+import '../widgets/common/theme_toggle_button.dart';
+import '../widgets/chat_page/message_bubble.dart';
+import '../widgets/chat_page/chat_app_bar_header.dart';
+import '../widgets/chat_page/connection_status_banner.dart';
+import '../widgets/chat_page/empty_chat_state.dart';
+import '../widgets/chat_page/message_input_bar.dart';
+import '../widgets/chat_page/quick_actions_bar.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 import '../services/p2p_service.dart';
+import '../services/database_service.dart';
+import '../theme/beacon_colors.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -29,8 +37,9 @@ void initState() {
   });
 }
 
-void _initializeChat() {
-  final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+  Future<void> _initializeChat() async {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
   if (args != null) {
     _device = args['device'] as DeviceModel?;
@@ -39,13 +48,12 @@ void _initializeChat() {
     _p2pService = Provider.of<P2PService>(context, listen: false);
 
     if (_device?.endpointId != null) {
-      // 1️⃣ Load old messages from storage
-      // Use the comprehensive method that checks all possible IDs
+        // 1️⃣ Load old messages from database
       final endpointId = _device!.endpointId!;
       final deviceId = _device!.id;
       
-      _messages.clear();
-      _messages.addAll(_p2pService!.getMessageHistoryForDevice(endpointId, deviceId));
+        // Load messages from database first
+        await _loadMessagesFromDatabase(endpointId, deviceId);
 
       // 2️⃣ Listen for new incoming messages
       final stream = _p2pService!.getMessageStream(endpointId);
@@ -78,7 +86,6 @@ void _initializeChat() {
     }
   }
 
-
   @override
   void dispose() {
     _messageController.dispose();
@@ -89,405 +96,92 @@ void _initializeChat() {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF898AC4),
-        title: Row(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1976D2), Color(0xFF42A5F5)],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
-                    child: Text(
-                      (_device?.name ?? 'U')[0],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                // Online indicator
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _device?.name ?? 'User',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4CAF50),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _device?.status ?? 'Active',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '• ${_device?.distance ?? 'Nearby'}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        elevation: 0,
+        title: ChatAppBarHeader(device: _device),
         actions: [
-          // Signal strength indicator
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Icon(
-              Icons.wifi,
-              color: Colors.white.withOpacity(0.8),
-            ),
-          ),
           IconButton(
-            icon: const Icon(Icons.info_outline, color: Colors.white),
+            icon: const Icon(Icons.info_outline),
             onPressed: _showDeviceInfo,
+            tooltip: 'Device Info',
           ),
+          const ThemeToggleButton(isCompact: true),
         ],
       ),
-      body: Column(
-        children: [
-          // Connection status banner
-          Consumer<P2PService>(
+      body: Consumer<P2PService>(
             builder: (context, p2pService, child) {
               final isConnected = _device?.endpointId != null &&
                   p2pService.connectedDevices.any(
                     (d) => d.endpointId == _device!.endpointId,
                   );
 
-              if (!isConnected) {
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(8),
-                  color: Colors.orange,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+          return Column(
                     children: [
-                      Icon(Icons.warning, color: Colors.white, size: 16),
-                      SizedBox(width: 8),
-                      Text(
-                        'Connection lost. Messages will be queued.',
-                        style: TextStyle(color: Colors.white, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            },
-          ),
-
-          // Messages List
+              ConnectionStatusBanner(isConnected: isConnected),
           Expanded(
             child: _messages.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.chat_bubble_outline,
-                          size: 64,
-                          color: Colors.grey[300],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No messages yet',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Start the conversation!',
-                          style: TextStyle(
-                            color: Colors.grey[400],
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
+                    ? const EmptyChatState()
                 : ListView.builder(
                     controller: _scrollController,
-                    padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                     itemCount: _messages.length,
                     itemBuilder: (context, index) {
-                      return _buildMessageBubble(_messages[index]);
+                          return MessageBubble(message: _messages[index]);
                     },
                   ),
           ),
-
-          // Quick Actions Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border(
-                top: BorderSide(color: Colors.grey[200]!),
+              QuickActionsBar(
+                onSOS: () => _sendQuickMessage('🚨 SOS', true),
+                onLocation: () => _sendQuickMessage('📍 Location', false),
+                onSafe: () => _sendQuickMessage('✅ Safe', false),
               ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildQuickActionChip('🚨 SOS', Icons.emergency, isEmergency: true),
-                _buildQuickActionChip('📍 Location', Icons.location_on),
-                _buildQuickActionChip('✅ Safe', Icons.check_circle),
-              ],
-            ),
-          ),
-
-          // Message Input Area
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withValues(alpha: 0.2),
-                  spreadRadius: 1,
-                  blurRadius: 5,
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
+              MessageInputBar(
                     controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                    ),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const VoiceCommandButton(isCompact: true),
-                const SizedBox(width: 8),
-                FloatingActionButton(
-                  mini: true,
-                  backgroundColor: const Color(0xFF898AC4),
-                  onPressed: _sendMessage,
-                  child: const Icon(Icons.send, color: Colors.white),
+                onSend: _sendMessage,
+                isEnabled: isConnected,
                 ),
               ],
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  void _sendMessage() async {
-    if (_messageController.text.trim().isEmpty || _device?.endpointId == null) {
+  Future<void> _sendMessage() async {
+    final messageText = _messageController.text.trim();
+    if (messageText.isEmpty || _device?.endpointId == null) {
       return;
     }
 
-    final messageText = _messageController.text.trim();
     final p2pService = Provider.of<P2PService>(context, listen: false);
-
-    // Clear input first
     _messageController.clear();
 
-    // Send via P2P (this will store in history and notify stream)
     try {
       await p2pService.sendMessage(_device!.endpointId!, messageText);
-      
-      // Reload messages from service to ensure we have the stored version
-      final endpointId = _device!.endpointId!;
-      final deviceId = _device!.id;
-      setState(() {
-        _messages.clear();
-        _messages.addAll(p2pService.getMessageHistoryForDevice(endpointId, deviceId));
-      });
+      _refreshMessages(p2pService);
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: BeaconColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     }
   }
 
-  Widget _buildMessageBubble(MessageModel message) {
-    return Align(
-      alignment: message.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        decoration: BoxDecoration(
-          gradient: message.isMe
-              ? const LinearGradient(
-                  colors: [Color(0xFF898AC4), Color(0xFFB5B6E0)],
-                )
-              : null,
-          color: message.isMe
-              ? null
-              : (message.isEmergency ? Colors.red[50] : Colors.grey[100]),
-          borderRadius: BorderRadius.circular(20),
-          border: message.isEmergency
-              ? Border.all(color: Colors.red, width: 2)
-              : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!message.isMe && message.senderName != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  message.senderName!,
-                  style: TextStyle(
-                    color: message.isEmergency ? Colors.red[900] : Colors.grey[600],
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            Text(
-              message.text,
-              style: TextStyle(
-                color: message.isMe
-                    ? Colors.white
-                    : (message.isEmergency ? Colors.red[900] : Colors.black87),
-                fontSize: 15,
-                fontWeight: message.isEmergency ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatTime(message.timestamp),
-                  style: TextStyle(
-                    color: message.isMe
-                        ? Colors.white.withValues(alpha: 0.8)
-                        : Colors.black54,
-                    fontSize: 11,
-                  ),
-                ),
-                if (message.isMe) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.done_all,
-                    size: 14,
-                    color: Colors.white.withValues(alpha: 0.8),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuickActionChip(String label, IconData icon, {bool isEmergency = false}) {
-    return InkWell(
-      onTap: () => _sendQuickMessage(label, isEmergency),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isEmergency
-              ? Colors.red[50]
-              : const Color(0xFF898AC4).withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isEmergency
-                ? Colors.red
-                : const Color(0xFF898AC4).withValues(alpha: 0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isEmergency ? Colors.red : const Color(0xFF898AC4),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isEmergency ? Colors.red : const Color(0xFF898AC4),
-                fontWeight: FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _sendQuickMessage(String message, bool isEmergency) async {
+  Future<void> _sendQuickMessage(String message, bool isEmergency) async {
     if (_device?.endpointId == null) return;
 
     final p2pService = Provider.of<P2PService>(context, listen: false);
 
-    // Send via P2P (this will store in history)
     try {
       if (isEmergency) {
         await p2pService.broadcastEmergencyAlert(message);
@@ -495,28 +189,65 @@ void _initializeChat() {
         await p2pService.sendMessage(_device!.endpointId!, message);
       }
       
-      // Reload messages from service to ensure we have the stored version
-      // For emergency alerts, reload from all connected devices to show the broadcast
-      final endpointId = _device!.endpointId!;
-      final deviceId = _device!.id;
-      
-      setState(() {
-        _messages.clear();
-        _messages.addAll(p2pService.getMessageHistoryForDevice(endpointId, deviceId));
-        // Sort by timestamp to ensure proper order
-        _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-      });
+      _refreshMessages(p2pService);
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to send: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: BeaconColors.error,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
     }
+  }
+
+  Future<void> _loadMessagesFromDatabase(String endpointId, String deviceId) async {
+    if (_p2pService == null) return;
+
+    // Load from both endpointId and deviceId
+    final messages1 = await DatabaseService.instance.getMessages(endpointId);
+    final messages2 = deviceId != endpointId 
+        ? await DatabaseService.instance.getMessages(deviceId)
+        : <MessageModel>[];
+
+    // Combine and deduplicate
+    final allMessages = <MessageModel>[];
+    final seenIds = <String>{};
+
+    for (var msg in [...messages1, ...messages2]) {
+      if (!seenIds.contains(msg.id)) {
+        allMessages.add(msg);
+        seenIds.add(msg.id);
+      }
+    }
+
+    // Also get from in-memory cache
+    final cacheMessages = _p2pService!.getMessageHistoryForDevice(endpointId, deviceId);
+    for (var msg in cacheMessages) {
+      if (!seenIds.contains(msg.id)) {
+        allMessages.add(msg);
+        seenIds.add(msg.id);
+      }
+    }
+
+    setState(() {
+      _messages.clear();
+      _messages.addAll(allMessages);
+      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    });
+  }
+
+  void _refreshMessages(P2PService p2pService) {
+    if (_device?.endpointId == null) return;
+
+    final endpointId = _device!.endpointId!;
+    final deviceId = _device!.id;
+
+    // Reload from database
+    _loadMessagesFromDatabase(endpointId, deviceId);
   }
 
   void _showDeviceInfo() {
@@ -555,23 +286,10 @@ void _initializeChat() {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            color: Colors.grey[700],
-            fontSize: 14,
-          ),
-        ),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
       ],
     );
-  }
-
-  String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

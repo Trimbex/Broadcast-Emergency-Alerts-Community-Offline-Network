@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../services/database_service.dart';
+import '../widgets/common/theme_toggle_button.dart';
+import '../theme/beacon_colors.dart';
 
 class IdentitySetupPage extends StatefulWidget {
   const IdentitySetupPage({super.key});
@@ -22,40 +24,55 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
 
   // If identity already exists, skip this page
   Future<void> _checkIfIdentityExists() async {
-    final prefs = await SharedPreferences.getInstance();
-    final name = prefs.getString('user_name');
-    if (name != null && name.isNotEmpty) {
+    final userProfile = await DatabaseService.instance.getUserProfile();
+    if (userProfile != null && userProfile['name'] != null) {
       // Automatically go to landing page
-      Future.delayed(Duration.zero, () {
-        Navigator.pushReplacementNamed(context, '/landing');
-      });
+      if (mounted) {
+        Future.delayed(Duration.zero, () {
+          Navigator.pushReplacementNamed(context, '/landing');
+        });
+      }
     }
   }
 
   Future<void> _saveIdentity() async {
     if (_nameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter your name or nickname.'),
-          backgroundColor: Colors.redAccent,
+        SnackBar(
+          content: const Text('Please enter your name or nickname.'),
+          backgroundColor: BeaconColors.error,
         ),
       );
       return;
     }
 
     setState(() => _isSaving = true);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('user_name', _nameController.text.trim());
-    await prefs.setString('user_role', _roleController.text.trim());
+
+    // Generate a persistent device ID
+    final deviceId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    await DatabaseService.instance.saveUserProfile(
+      name: _nameController.text.trim(),
+      deviceId: deviceId,
+      role: _roleController.text.trim(),
+    );
+
     setState(() => _isSaving = false);
 
-    Navigator.pushReplacementNamed(context, '/landing');
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/landing');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF898AC4),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
@@ -69,14 +86,14 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFFFFFF), Color(0xFFF3F3F3)],
+                  gradient: LinearGradient(
+                    colors: BeaconColors.accentGradient(context),
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.15),
+                      color: BeaconColors.primary.withOpacity(0.3),
                       blurRadius: 18,
                       offset: const Offset(0, 6),
                     ),
@@ -85,35 +102,27 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
                 child: const Icon(
                   Icons.person_outline,
                   size: 80,
-                  color: Color(0xFFFF5F6D),
+                  color: Colors.white,
                 ),
               ),
 
               const SizedBox(height: 24),
 
               // Title
-              const Text(
+              Text(
                 'Set Up Your Identity',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.headlineMedium?.copyWith(letterSpacing: 1.2),
               ),
 
               const SizedBox(height: 10),
 
-              const Text(
+              Text(
                 'This helps others recognize you in the network.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 14,
-                  color: Colors.white70,
-                ),
+                style: Theme.of(context).textTheme.bodySmall,
               ),
 
               const SizedBox(height: 40),
@@ -152,35 +161,16 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
                           ),
                         )
                       : const Icon(Icons.check_circle_outline, size: 22),
-                  label: Text(
-                    _isSaving ? 'Saving...' : 'Save & Continue',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1976D2),
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(35),
-                    ),
-                    shadowColor: Colors.black.withOpacity(0.2),
-                  ),
+                  label: Text(_isSaving ? 'Saving...' : 'Save & Continue'),
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              const Text(
+              Text(
                 'Your information stays only on your device.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
-                  fontFamily: 'Poppins',
-                ),
+                style: Theme.of(context).textTheme.bodySmall,
+                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -197,25 +187,10 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
   }) {
     return TextField(
       controller: controller,
-      style: const TextStyle(
-        color: Colors.white,
-        fontFamily: 'Poppins',
-        fontSize: 15,
-      ),
+      style: Theme.of(context).textTheme.bodyMedium,
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.white70),
+        prefixIcon: Icon(icon, color: BeaconColors.textSecondary(context)),
         labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        filled: true,
-        fillColor: Colors.white.withOpacity(0.15),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
-          borderSide: const BorderSide(color: Colors.white54, width: 1),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(30),
-          borderSide: const BorderSide(color: Colors.white, width: 1.5),
-        ),
       ),
     );
   }

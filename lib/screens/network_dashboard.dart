@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../widgets/voice_command_button.dart';
-import '../models/device_model.dart';
+import '../services/database_service.dart';
+import '../widgets/common/theme_toggle_button.dart';
+import '../widgets/network_dashboard/device_card.dart';
+import '../widgets/network_dashboard/network_status_indicator.dart';
+import '../widgets/network_dashboard/empty_network_state.dart';
+import '../widgets/network_dashboard/network_stats_header.dart';
+import '../widgets/network_dashboard/quick_actions_bar.dart';
 import '../services/p2p_service.dart';
-import 'resource_sharing_page.dart';
-import 'chat_page.dart';
+import '../theme/beacon_colors.dart';
 
 class NetworkDashboard extends StatefulWidget {
   const NetworkDashboard({super.key});
@@ -15,8 +18,8 @@ class NetworkDashboard extends StatefulWidget {
 }
 
 class _NetworkDashboardState extends State<NetworkDashboard> {
-  final Color primaryColor = const Color(0xFF898AC4);
-  bool _isInitialized = false;
+  NetworkState _networkState = NetworkState.initializing;
+  bool _isRefreshing = false;
 
   final List<String> _predefinedMessages = [
     'Need immediate help',
@@ -29,50 +32,97 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   @override
   void initState() {
     super.initState();
-    _initializeP2P();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeP2P();
+    });
   }
 
   Future<void> _initializeP2P() async {
-    final p2pService = Provider.of<P2PService>(context, listen: false);
-    
-    // Initialize with saved user name or default
-    final userName = await _getUserName();
-    final success = await p2pService.initialize(userName);
-    
-    if (success) {
-      // Start both advertising and discovery for mesh network
-      await p2pService.startAdvertising();
-      await p2pService.startDiscovery();
-      
+    if (!mounted) return;
+
+    setState(() {
+      _networkState = NetworkState.initializing;
+    });
+
+    try {
+      final p2pService = Provider.of<P2PService>(context, listen: false);
+
+      // Initialize with saved user name or default
+      final userName = await _getUserName();
+      final success = await p2pService.initialize(userName);
+
+      if (!mounted) return;
+
+      if (success) {
+        // Start both advertising and discovery for mesh network
+        final advertisingSuccess = await p2pService.startAdvertising();
+        final discoverySuccess = await p2pService.startDiscovery();
+
+        if (!mounted) return;
+
+        if (advertisingSuccess && discoverySuccess) {
+          setState(() {
+            _networkState = NetworkState.searching;
+          });
+
+          _showSuccessMessage('📡 Network Active - Searching for nearby devices...');
+        } else {
+          setState(() {
+            _networkState = NetworkState.error;
+          });
+          _showErrorMessage('Failed to start network services');
+        }
+      } else {
+        setState(() {
+          _networkState = NetworkState.error;
+        });
+        _showErrorMessage('Failed to initialize P2P network. Check permissions.');
+      }
+    } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        _isInitialized = true;
+        _networkState = NetworkState.error;
       });
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📡 P2P Network Active - Searching for nearby devices...'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('⚠️ Failed to start P2P network. Check permissions.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      _showErrorMessage('Error: ${e.toString()}');
     }
   }
 
   Future<String> _getUserName() async {
-    // Get from SharedPreferences (set in identity setup)
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_name') ?? 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    try {
+      final userProfile = await DatabaseService.instance.getUserProfile();
+      return userProfile?['name'] ??
+          'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    } catch (e) {
+      return 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
+    }
+  }
+
+  void _showSuccessMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: BeaconColors.success,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showErrorMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: BeaconColors.error,
+        duration: const Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: _initializeP2P,
+        ),
+      ),
+    );
   }
 
   @override
@@ -90,196 +140,84 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     return Consumer<P2PService>(
       builder: (context, p2pService, child) {
         final connectedDevices = p2pService.connectedDevices;
-        
+        final isNetworkActive =
+            p2pService.isAdvertising && p2pService.isDiscovering;
+
+        // Update state based on network status
+        if (_networkState == NetworkState.searching && isNetworkActive) {
+          // Network is active, show devices or empty state
+        } else if (_networkState == NetworkState.searching && !isNetworkActive) {
+          // Network stopped, show error
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _networkState = NetworkState.error;
+              });
+              _showErrorMessage('Network connection lost');
+            }
+          });
+        }
+
         return Scaffold(
           appBar: AppBar(
-            backgroundColor: primaryColor,
             title: Text(
               mode == 'join' ? 'Emergency Network' : 'Your Network',
-              style: const TextStyle(color: Colors.white),
             ),
             actions: [
-              // P2P Status indicator
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: p2pService.isAdvertising && p2pService.isDiscovering
-                          ? Colors.green
-                          : Colors.orange,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          p2pService.isAdvertising && p2pService.isDiscovering
-                              ? Icons.wifi
-                              : Icons.wifi_off,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          p2pService.isAdvertising && p2pService.isDiscovering
-                              ? 'ACTIVE'
-                              : 'INACTIVE',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: NetworkStatusIndicator(isActive: isNetworkActive),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.refresh, color: Colors.white),
-                onPressed: _refreshNetwork,
-              ),
+              if (_isRefreshing)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: _isRefreshing ? null : _refreshNetwork,
+                  tooltip: 'Refresh Network',
+                ),
+              const ThemeToggleButton(isCompact: true),
             ],
           ),
           body: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Color(0xFF898AC4), Color(0xFFD1C4E9)],
+                colors: BeaconColors.primaryGradient(context),
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
             ),
             child: Column(
               children: [
-                // Header with stats
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildStatusItem(
-                        icon: Icons.people,
-                        label: 'Connected',
-                        value: '${connectedDevices.length}',
-                        color: connectedDevices.isNotEmpty ? Colors.green : Colors.grey,
-                      ),
-                      Container(width: 1, height: 40, color: Colors.grey[300]),
-                      _buildStatusItem(
-                        icon: Icons.battery_std,
-                        label: 'Battery',
-                        value: '${p2pService.batteryLevel}%',
-                        color: p2pService.batteryLevel > 50 ? Colors.green : Colors.orange,
-                      ),
-                    ],
-                  ),
-                ),
+                // Stats Header
+                const NetworkStatsHeader(),
 
-                // Quick actions
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _showQuickMessageDialog,
-                          icon: const Icon(Icons.message),
-                          label: const Text('Quick Message'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => ResourceSharingPage()),
-                          ),
-                          icon: const Icon(Icons.inventory),
-                          label: const Text('Resources'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
+                // Quick Actions
+                if (isNetworkActive && connectedDevices.isNotEmpty)
+                  QuickActionsBar(
+                    onQuickMessage: _showQuickMessageDialog,
                   ),
-                ),
 
-                // Devices list or empty message
+                // Devices List or Empty State
                 Expanded(
-                  child: connectedDevices.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.search,
-                                size: 64,
-                                color: Colors.white.withOpacity(0.5),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                _isInitialized
-                                    ? 'Searching for nearby devices...'
-                                    : 'Initializing P2P network...',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Make sure both devices have\nBluetooth and Location enabled',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              if (_isInitialized)
-                                const CircularProgressIndicator(
-                                  color: Colors.white,
-                                ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemCount: connectedDevices.length,
-                          itemBuilder: (context, index) {
-                            return _buildDeviceCard(connectedDevices[index], p2pService);
-                          },
-                        ),
-                ),
-
-                // Voice button
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: VoiceCommandButton(),
+                  child: _buildContent(
+                    context,
+                    p2pService,
+                    connectedDevices,
+                    isNetworkActive,
+                  ),
                 ),
               ],
             ),
@@ -289,182 +227,81 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     );
   }
 
-  Widget _buildStatusItem({
-    required IconData icon,
-    required String label,
-    required String value,
-    Color? color,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, size: 24, color: color ?? primaryColor),
-        const SizedBox(height: 6),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: color ?? primaryColor,
-          ),
+  Widget _buildContent(
+    BuildContext context,
+    P2PService p2pService,
+    List connectedDevices,
+    bool isNetworkActive,
+  ) {
+    // Show error state if initialization failed
+    if (_networkState == NetworkState.error) {
+      return EmptyNetworkState(
+        state: NetworkState.error,
+        onRetry: _initializeP2P,
+      );
+    }
+
+    // Show initializing state
+    if (_networkState == NetworkState.initializing) {
+      return const EmptyNetworkState(state: NetworkState.initializing);
+    }
+
+    // Show devices list if available
+    if (connectedDevices.isNotEmpty) {
+      return RefreshIndicator(
+        onRefresh: _refreshNetwork,
+        color: BeaconColors.primary,
+        child: ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: connectedDevices.length,
+          itemBuilder: (context, index) {
+            return DeviceCard(
+              device: connectedDevices[index],
+              p2pService: p2pService,
+            );
+          },
         ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-        ),
-      ],
-    );
+      );
+    }
+
+    // Show searching state
+    return const EmptyNetworkState(state: NetworkState.searching);
   }
 
-  Widget _buildDeviceCard(DeviceModel device, P2PService p2pService) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            // Avatar box with online indicator
-            Stack(
-              children: [
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [primaryColor, const Color(0xFFB5B6E0)],
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Center(
-                    child: Text(
-                      device.name[0],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4CAF50),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 16),
 
-            // Device info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    device.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
-                      const SizedBox(width: 4),
-                      Text(
-                        device.distance,
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4CAF50),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        device.status,
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+  Future<void> _refreshNetwork() async {
+    if (_isRefreshing) return;
 
-            // Battery + Chat
-            Column(
-              children: [
-                Icon(
-                  Icons.battery_std,
-                  color: device.batteryLevel > 50
-                      ? const Color(0xFF4CAF50)
-                      : const Color(0xFFFF9800),
-                  size: 20,
-                ),
-                Text(
-                  '${device.batteryLevel}%',
-                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(width: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: primaryColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.chat_bubble_outline),
-                color: Colors.white,
-                iconSize: 20,
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ChatPage(),
-                      settings: RouteSettings(
-                        arguments: {'device': device},
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    setState(() {
+      _isRefreshing = true;
+    });
 
-  void _refreshNetwork() async {
-    final p2pService = Provider.of<P2PService>(context, listen: false);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('🔄 Refreshing network...'),
-        duration: Duration(seconds: 2),
-      ),
-    );
+    try {
+      final p2pService = Provider.of<P2PService>(context, listen: false);
 
-    // Restart discovery
-    await p2pService.stopDiscovery();
-    await Future.delayed(const Duration(milliseconds: 500));
-    await p2pService.startDiscovery();
+      // Restart discovery
+      await p2pService.stopDiscovery();
+      await Future.delayed(const Duration(milliseconds: 500));
+      final success = await p2pService.startDiscovery();
+
+      if (!mounted) return;
+
+      if (success) {
+        _showSuccessMessage('🔄 Network refreshed');
+      } else {
+        _showErrorMessage('Failed to refresh network');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showErrorMessage('Error refreshing: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   void _showQuickMessageDialog() {
@@ -484,8 +321,8 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                     ? Icons.emergency
                     : Icons.message,
                 color: message.contains('Emergency') || message.contains('help')
-                    ? Colors.red
-                    : primaryColor,
+                    ? BeaconColors.error
+                    : BeaconColors.primary,
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -505,7 +342,7 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('📤 Sent: $message'),
-                    backgroundColor: Colors.green,
+                    backgroundColor: BeaconColors.success,
                   ),
                 );
               },
