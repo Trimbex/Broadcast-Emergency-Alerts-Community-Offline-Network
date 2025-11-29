@@ -207,6 +207,63 @@ class NotificationService {
     }
   }
 
+  /// Show notification for resource request response (accepted or denied)
+  Future<void> showResourceResponseNotification({
+    required String providerName,
+    required String resourceName,
+    required bool approved,
+    int? quantity,
+    String? payload,
+  }) async {
+    if (_notifications == null) {
+      debugPrint('⚠️ Notifications: Service not initialized');
+      return;
+    }
+    
+    try {
+      final androidDetails = AndroidNotificationDetails(
+        'beacon_emergency_channel',
+        'BEACON Emergency Notifications',
+        channelDescription: 'Notifications for emergency messages and resource requests',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        icon: '@mipmap/ic_launcher',
+        styleInformation: const BigTextStyleInformation(''),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      final details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      final title = approved
+          ? '✅ Request Approved'
+          : '❌ Request Denied';
+      
+      final message = approved
+          ? '$providerName approved your request for $resourceName (Qty: $quantity)'
+          : '$providerName denied your request for $resourceName';
+
+      await _notifications!.show(
+        DateTime.now().millisecondsSinceEpoch % 100000,
+        title,
+        message,
+        details,
+        payload: payload,
+      );
+    } catch (e) {
+      debugPrint('❌ Notifications: Failed to show resource response notification: $e');
+    }
+  }
+
   /// Cancel all notifications
   Future<void> cancelAll() async {
     await _notifications?.cancelAll();

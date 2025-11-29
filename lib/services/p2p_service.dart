@@ -1010,12 +1010,18 @@ Future<bool> _requestPermissions() async {
 
   /// Respond to a resource request (approve or deny)
   Future<void> respondToResourceRequest(String endpointId, String resourceId, bool approved, int quantity, String requesterName) async {
+    // Get the resource to include name in response
+    final resourceKey = '${resourceId}_$_localDeviceId';
+    final resource = _networkResources[resourceKey];
+    
     final responseData = {
       'type': 'resource_request_response',
       'resourceId': resourceId,
+      'resourceName': resource?.name ?? 'Unknown Resource',
       'approved': approved,
       'quantity': quantity,
       'requesterName': requesterName,
+      'providerName': _localDeviceName ?? 'Unknown',
       'timestamp': DateTime.now().toIso8601String(),
     };
     await _sendData(endpointId, responseData);
@@ -1025,9 +1031,11 @@ Future<bool> _requestPermissions() async {
   /// Handle resource request response (received by requester)
   void _handleResourceRequestResponse(String endpointId, Map<String, dynamic> data) {
     final resourceId = data['resourceId'] as String;
+    final resourceName = data['resourceName'] as String? ?? 'Unknown Resource';
     final approved = data['approved'] as bool;
     final quantity = data['quantity'] as int;
     final requesterName = data['requesterName'] as String? ?? 'Unknown';
+    final providerName = data['providerName'] as String? ?? 'Unknown';
     
     if (approved) {
       // Find the resource in our network resources and update it
@@ -1048,8 +1056,25 @@ Future<bool> _requestPermissions() async {
           break;
         }
       }
+      
+      // Show notification to requester that request was approved
+      NotificationService.instance.showResourceResponseNotification(
+        providerName: providerName,
+        resourceName: resourceName,
+        approved: true,
+        quantity: quantity,
+        payload: 'resource_response_$resourceId',
+      );
     } else {
       debugPrint('❌ P2P: Resource request denied for $resourceId');
+      
+      // Show notification to requester that request was denied
+      NotificationService.instance.showResourceResponseNotification(
+        providerName: providerName,
+        resourceName: resourceName,
+        approved: false,
+        payload: 'resource_response_$resourceId',
+      );
     }
   }
 
