@@ -98,43 +98,71 @@ class _VoiceCommandListenerState extends State<VoiceCommandListener> {
         if (_lastCommandResult.isNotEmpty)
           Container(
             margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: _isError
-                  ? BeaconColors.error.withValues(alpha: 0.1)
-                  : BeaconColors.success.withValues(alpha: 0.1),
+                  ? BeaconColors.error.withValues(alpha: 0.08)
+                  : BeaconColors.success.withValues(alpha: 0.08),
               border: Border.all(
-                color: _isError ? BeaconColors.error : BeaconColors.success,
+                color: _isError ? BeaconColors.error.withValues(alpha: 0.3) : BeaconColors.success.withValues(alpha: 0.3),
+                width: 1.5,
               ),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  _isError ? Icons.error : Icons.check_circle,
-                  color: _isError ? BeaconColors.error : BeaconColors.success,
+                  _isError ? Icons.error_outline : Icons.check_circle_outline,
+                  color: _isError ? BeaconColors.error.withValues(alpha: 0.8) : BeaconColors.success.withValues(alpha: 0.8),
                   size: 20,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  _lastCommandResult,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: _isError ? BeaconColors.error : BeaconColors.success,
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    _lastCommandResult,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _isError ? BeaconColors.error.withValues(alpha: 0.8) : BeaconColors.success.withValues(alpha: 0.8),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        FloatingActionButton(
-          onPressed: _toggleListening,
-          backgroundColor: isListening
-              ? (widget.activeColor ?? BeaconColors.error)
-              : (widget.inactiveColor ?? BeaconColors.primary),
-          child: Icon(
-            isListening ? Icons.mic : Icons.mic_none,
-            color: Colors.white,
-            size: widget.size * 0.5,
+        Container(
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: (isListening 
+                    ? const Color(0xFFFF6B35) // Beacon Orange
+                    : const Color(0xFFFF8C42)).withValues(alpha: 0.35),
+                blurRadius: isListening ? 24 : 14,
+                spreadRadius: isListening ? 3 : 1.5,
+              ),
+              // Extra glow layer for sparkle effect
+              BoxShadow(
+                color: (isListening 
+                    ? const Color(0xFFFF8C42) // Lighter orange glow
+                    : const Color(0xFFFFAB7A)).withValues(alpha: 0.18),
+                blurRadius: isListening ? 40 : 20,
+                spreadRadius: isListening ? 5 : 2.5,
+              ),
+            ],
+          ),
+          child: FloatingActionButton(
+            onPressed: _toggleListening,
+            backgroundColor: isListening
+                ? const Color(0xFFFF6B35) // Bright Beacon Orange when listening
+                : const Color(0xFFFF8C42), // Lighter orange when idle
+            elevation: 0,
+            shape: const CircleBorder(),
+            child: Icon(
+              isListening ? Icons.mic : Icons.mic_none,
+              color: Colors.white,
+              size: widget.size * 0.5,
+            ),
           ),
         ),
       ],
