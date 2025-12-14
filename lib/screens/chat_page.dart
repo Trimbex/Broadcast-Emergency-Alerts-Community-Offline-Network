@@ -8,9 +8,8 @@ import '../widgets/chat_page/empty_chat_state.dart';
 import '../widgets/chat_page/message_input_bar.dart';
 import '../widgets/chat_page/quick_actions_bar.dart';
 import '../models/device_model.dart';
-import '../models/message_model.dart';
 import '../services/p2p_service.dart';
-import '../services/database_service.dart';
+import '../viewmodels/chat_viewmodel.dart';
 import '../theme/beacon_colors.dart';
 
 class ChatPage extends StatefulWidget {
@@ -22,57 +21,38 @@ class ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
-  final List<MessageModel> _messages = [];
   final ScrollController _scrollController = ScrollController();
-  DeviceModel? _device;
-  P2PService? _p2pService;
+  ChatViewModel? _viewModel;
 
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-  // Wait for widget to fully build before accessing context
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _initializeChat();
-  });
-}
+    // Wait for widget to fully build before accessing context
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeChat();
+    });
+  }
 
   Future<void> _initializeChat() async {
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
-  if (args != null) {
-    _device = args['device'] as DeviceModel?;
+    if (args != null) {
+      final device = args['device'] as DeviceModel?;
 
-    // Initialize P2P service
-    _p2pService = Provider.of<P2PService>(context, listen: false);
+      // Create ViewModel with P2P service
+      final p2pService = Provider.of<P2PService>(context, listen: false);
+      _viewModel = ChatViewModel(p2pService: p2pService);
 
-    if (_device?.endpointId != null) {
-        // 1️⃣ Load old messages from database
-      final endpointId = _device!.endpointId!;
-      final deviceId = _device!.id;
-      
-        // Load messages from database first
-        await _loadMessagesFromDatabase(endpointId, deviceId);
+      // Initialize ViewModel
+      await _viewModel!.initialize(device);
 
-      // 2️⃣ Listen for new incoming messages
-      final stream = _p2pService!.getMessageStream(endpointId);
-      stream?.listen((message) {
-        // Check if message already exists (avoid duplicates)
-        if (!_messages.any((m) => m.id == message.id)) {
-          setState(() {
-            _messages.add(message);
-            // Keep sorted
-            _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-          });
-          _scrollToBottom();
-        }
-      });
+      if (mounted) {
+        setState(() {}); // Trigger rebuild
+      }
     }
-
-    setState(() {}); // Refresh UI with loaded device & messages
   }
-}
 
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
@@ -90,167 +70,132 @@ void initState() {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _viewModel?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        title: ChatAppBarHeader(device: _device),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: _showDeviceInfo,
-            tooltip: 'Device Info',
-          ),
-          const ThemeToggleButton(isCompact: true),
-        ],
-      ),
-      body: Consumer<P2PService>(
-            builder: (context, p2pService, child) {
-              final isConnected = _device?.endpointId != null &&
-                  p2pService.connectedDevices.any(
-                    (d) => d.endpointId == _device!.endpointId,
-                  );
+    if (_viewModel == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-          return Column(
-                    children: [
-              ConnectionStatusBanner(isConnected: isConnected),
-          Expanded(
-            child: _messages.isEmpty
-                    ? const EmptyChatState()
-                : ListView.builder(
-                    controller: _scrollController,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                          return MessageBubble(message: _messages[index]);
-                    },
-                  ),
+    return ChangeNotifierProvider<ChatViewModel>.value(
+      value: _viewModel!,
+      child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: AppBar(
+          elevation: 0,
+          title: Consumer<ChatViewModel>(
+            builder: (context, viewModel, child) =>
+                ChatAppBarHeader(device: viewModel.device),
           ),
-              QuickActionsBar(
-                onSOS: () => _sendQuickMessage('🚨 SOS', true),
-                onLocation: () => _sendQuickMessage('📍 Location', false),
-                onSafe: () => _sendQuickMessage('✅ Safe', false),
-              ),
-              MessageInputBar(
-                    controller: _messageController,
-                onSend: _sendMessage,
-                isEnabled: isConnected,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.info_outline),
+              onPressed: _showDeviceInfo,
+              tooltip: 'Device Info',
+            ),
+            const ThemeToggleButton(isCompact: true),
+          ],
+        ),
+        body: Consumer2<ChatViewModel, P2PService>(
+          builder: (context, viewModel, p2pService, child) {
+            final isConnected = viewModel.isConnected;
+
+            return Column(
+              children: [
+                ConnectionStatusBanner(isConnected: isConnected),
+                Expanded(
+                  child: viewModel.messages.isEmpty
+                      ? const EmptyChatState()
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          itemCount: viewModel.messages.length,
+                          itemBuilder: (context, index) {
+                            return MessageBubble(message: viewModel.messages[index]);
+                          },
+                        ),
+                ),
+                QuickActionsBar(
+                  onSOS: () => _sendQuickMessage('🚨 SOS', true),
+                  onLocation: () => _sendQuickMessage('📍 Location', false),
+                  onSafe: () => _sendQuickMessage('✅ Safe', false),
+                ),
+                MessageInputBar(
+                  controller: _messageController,
+                  onSend: _sendMessage,
+                  isEnabled: isConnected,
                 ),
               ],
-          );
-        },
+            );
+          },
+        ),
       ),
     );
   }
 
   Future<void> _sendMessage() async {
     final messageText = _messageController.text.trim();
-    if (messageText.isEmpty || _device?.endpointId == null) {
+    if (messageText.isEmpty || _viewModel == null) {
       return;
     }
 
-    final p2pService = Provider.of<P2PService>(context, listen: false);
     _messageController.clear();
 
-    try {
-      await p2pService.sendMessage(_device!.endpointId!, messageText);
-      _refreshMessages(p2pService);
+    final success = await _viewModel!.sendMessage(messageText);
+    if (success) {
       _scrollToBottom();
-    } catch (e) {
-      if (mounted) {
+    } else {
+      // Show error from ViewModel
+      if (_viewModel!.errorMessage != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send: $e'),
+            content: Text(_viewModel!.errorMessage!),
             backgroundColor: BeaconColors.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
+        _viewModel!.clearError();
       }
     }
   }
 
   Future<void> _sendQuickMessage(String message, bool isEmergency) async {
-    if (_device?.endpointId == null) return;
+    if (_viewModel == null) return;
 
-    final p2pService = Provider.of<P2PService>(context, listen: false);
+    final success = await _viewModel!.sendQuickMessage(
+      message,
+      isEmergency: isEmergency,
+    );
 
-    try {
-      if (isEmergency) {
-        await p2pService.broadcastEmergencyAlert(message);
-      } else {
-        await p2pService.sendMessage(_device!.endpointId!, message);
-      }
-      
-      _refreshMessages(p2pService);
+    if (success) {
       _scrollToBottom();
-    } catch (e) {
-      if (mounted) {
+    } else {
+      // Show error from ViewModel
+      if (_viewModel!.errorMessage != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send: $e'),
+            content: Text(_viewModel!.errorMessage!),
             backgroundColor: BeaconColors.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
+        _viewModel!.clearError();
       }
     }
-  }
-
-  Future<void> _loadMessagesFromDatabase(String endpointId, String deviceId) async {
-    if (_p2pService == null) return;
-
-    // Load from both endpointId and deviceId
-    final messages1 = await DatabaseService.instance.getMessages(endpointId);
-    final messages2 = deviceId != endpointId 
-        ? await DatabaseService.instance.getMessages(deviceId)
-        : <MessageModel>[];
-
-    // Combine and deduplicate
-    final allMessages = <MessageModel>[];
-    final seenIds = <String>{};
-
-    for (var msg in [...messages1, ...messages2]) {
-      if (!seenIds.contains(msg.id)) {
-        allMessages.add(msg);
-        seenIds.add(msg.id);
-      }
-    }
-
-    // Also get from in-memory cache
-    final cacheMessages = _p2pService!.getMessageHistoryForDevice(endpointId, deviceId);
-    for (var msg in cacheMessages) {
-      if (!seenIds.contains(msg.id)) {
-        allMessages.add(msg);
-        seenIds.add(msg.id);
-      }
-    }
-
-    setState(() {
-      _messages.clear();
-      _messages.addAll(allMessages);
-      _messages.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    });
-  }
-
-  void _refreshMessages(P2PService p2pService) {
-    if (_device?.endpointId == null) return;
-
-    final endpointId = _device!.endpointId!;
-    final deviceId = _device!.id;
-
-    // Reload from database
-    _loadMessagesFromDatabase(endpointId, deviceId);
   }
 
   void _showDeviceInfo() {
+    if (_viewModel?.device == null) return;
+
+    final device = _viewModel!.device!;
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -259,13 +204,13 @@ void initState() {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildInfoRow('Name:', _device?.name ?? 'Unknown'),
+            _buildInfoRow('Name:', device.name),
             const SizedBox(height: 8),
-            _buildInfoRow('Status:', _device?.status ?? 'Unknown'),
+            _buildInfoRow('Status:', device.status),
             const SizedBox(height: 8),
-            _buildInfoRow('Distance:', _device?.distance ?? 'Unknown'),
+            _buildInfoRow('Distance:', device.distance),
             const SizedBox(height: 8),
-            _buildInfoRow('Battery:', '${_device?.batteryLevel ?? 0}%'),
+            _buildInfoRow('Battery:', '${device.batteryLevel}%'),
             const SizedBox(height: 8),
             _buildInfoRow('Connection:', 'P2P (Nearby Connections)'),
           ],

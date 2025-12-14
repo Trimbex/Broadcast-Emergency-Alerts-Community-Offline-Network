@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/database_service.dart';
 import '../widgets/common/theme_toggle_button.dart';
 import '../widgets/network_dashboard/device_card.dart';
 import '../widgets/network_dashboard/network_status_indicator.dart';
-import '../widgets/network_dashboard/empty_network_state.dart';
+import '../widgets/network_dashboard/empty_network_state.dart' as widget;
 import '../widgets/network_dashboard/network_stats_header.dart';
 import '../widgets/network_dashboard/quick_actions_bar.dart';
 import '../services/p2p_service.dart';
+import '../viewmodels/network_dashboard_viewmodel.dart';
 import '../theme/beacon_colors.dart';
 
 class NetworkDashboard extends StatefulWidget {
@@ -18,8 +18,7 @@ class NetworkDashboard extends StatefulWidget {
 }
 
 class _NetworkDashboardState extends State<NetworkDashboard> {
-  NetworkState _networkState = NetworkState.initializing;
-  bool _isRefreshing = false;
+  NetworkDashboardViewModel? _viewModel;
 
   final List<String> _predefinedMessages = [
     'Need immediate help',
@@ -40,62 +39,23 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
   Future<void> _initializeP2P() async {
     if (!mounted) return;
 
-    setState(() {
-      _networkState = NetworkState.initializing;
-    });
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final mode = args?['mode'] ?? 'join';
 
-    try {
-      final p2pService = Provider.of<P2PService>(context, listen: false);
+    final p2pService = Provider.of<P2PService>(context, listen: false);
+    _viewModel = NetworkDashboardViewModel(p2pService: p2pService);
 
-      // Initialize with saved user name or default
-      final userName = await _getUserName();
-      final success = await p2pService.initialize(userName);
+    await _viewModel!.initialize(mode: mode);
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      if (success) {
-        // Start both advertising and discovery for mesh network
-        final advertisingSuccess = await p2pService.startAdvertising();
-        final discoverySuccess = await p2pService.startDiscovery();
-
-        if (!mounted) return;
-
-        if (advertisingSuccess && discoverySuccess) {
-          setState(() {
-            _networkState = NetworkState.searching;
-          });
-
-          _showSuccessMessage('📡 Network Active - Searching for nearby devices...');
-        } else {
-          setState(() {
-            _networkState = NetworkState.error;
-          });
-          _showErrorMessage('Failed to start network services');
-        }
-      } else {
-        setState(() {
-          _networkState = NetworkState.error;
-        });
-        _showErrorMessage('Failed to initialize P2P network. Check permissions.');
-      }
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _networkState = NetworkState.error;
-      });
-      _showErrorMessage('Error: ${e.toString()}');
+    if (_viewModel!.networkState == NetworkState.searching) {
+      _showSuccessMessage('📡 Network Active - Searching for nearby devices...');
+    } else if (_viewModel!.errorMessage != null) {
+      _showErrorMessage(_viewModel!.errorMessage!);
     }
-  }
 
-  Future<String> _getUserName() async {
-    try {
-      final userProfile = await DatabaseService.instance.getUserProfile();
-      return userProfile?['name'] ??
-          'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
-    } catch (e) {
-      return 'User-${DateTime.now().millisecondsSinceEpoch % 10000}';
-    }
+    setState(() {}); // Trigger rebuild
   }
 
   void _showSuccessMessage(String message) {
@@ -127,70 +87,58 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
 
   @override
   void dispose() {
-    // Don't stop P2P when leaving this screen
-    // It should run in background
+    _viewModel?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final mode = args?['mode'] ?? 'join';
+    if (_viewModel == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    return Consumer<P2PService>(
-      builder: (context, p2pService, child) {
-        final connectedDevices = p2pService.connectedDevices;
-        final isNetworkActive =
-            p2pService.isAdvertising && p2pService.isDiscovering;
+    return ChangeNotifierProvider<NetworkDashboardViewModel>.value(
+      value: _viewModel!,
+      child: Consumer2<NetworkDashboardViewModel, P2PService>(
+        builder: (context, viewModel, p2pService, child) {
+          final connectedDevices = viewModel.connectedDevices;
+          final isNetworkActive = viewModel.isNetworkActive;
 
-        // Update state based on network status
-        if (_networkState == NetworkState.searching && isNetworkActive) {
-          // Network is active, show devices or empty state
-        } else if (_networkState == NetworkState.searching && !isNetworkActive) {
-          // Network stopped, show error
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              setState(() {
-                _networkState = NetworkState.error;
-              });
-              _showErrorMessage('Network connection lost');
-            }
-          });
-        }
-
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              mode == 'join' ? 'Emergency Network' : 'Your Network',
-            ),
-            actions: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                child: Center(
-                  child: NetworkStatusIndicator(isActive: isNetworkActive),
-                ),
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                viewModel.mode == 'join' ? 'Emergency Network' : 'Your Network',
               ),
-              if (_isRefreshing)
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
+              actions: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Center(
+                    child: NetworkStatusIndicator(isActive: isNetworkActive),
                   ),
-                )
-              else
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  onPressed: _isRefreshing ? null : _refreshNetwork,
-                  tooltip: 'Refresh Network',
                 ),
-              const ThemeToggleButton(isCompact: true),
-            ],
-          ),
+                if (viewModel.isRefreshing)
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: viewModel.isRefreshing ? null : () => _refreshNetwork(viewModel),
+                    tooltip: 'Refresh Network',
+                  ),
+                const ThemeToggleButton(isCompact: true),
+              ],
+            ),
           body: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -199,57 +147,60 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
                 end: Alignment.bottomCenter,
               ),
             ),
-            child: Column(
-              children: [
-                // Stats Header
-                const NetworkStatsHeader(),
+              child: Column(
+                children: [
+                  // Stats Header
+                  const NetworkStatsHeader(),
 
-                // Quick Actions
-                if (isNetworkActive && connectedDevices.isNotEmpty)
-                  QuickActionsBar(
-                    onQuickMessage: _showQuickMessageDialog,
-                  ),
+                  // Quick Actions
+                  if (isNetworkActive && connectedDevices.isNotEmpty)
+                    QuickActionsBar(
+                      onQuickMessage: _showQuickMessageDialog,
+                    ),
 
-                // Devices List or Empty State
-                Expanded(
-                  child: _buildContent(
-                    context,
-                    p2pService,
-                    connectedDevices,
-                    isNetworkActive,
+                  // Devices List or Empty State
+                  Expanded(
+                    child: _buildContent(
+                      context,
+                      viewModel,
+                      p2pService,
+                      connectedDevices,
+                      isNetworkActive,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
   Widget _buildContent(
     BuildContext context,
+    NetworkDashboardViewModel viewModel,
     P2PService p2pService,
     List connectedDevices,
     bool isNetworkActive,
   ) {
     // Show error state if initialization failed
-    if (_networkState == NetworkState.error) {
-      return EmptyNetworkState(
-        state: NetworkState.error,
+    if (viewModel.networkState == NetworkState.error) {
+      return widget.EmptyNetworkState(
+        state: widget.NetworkState.error,
         onRetry: _initializeP2P,
       );
     }
 
     // Show initializing state
-    if (_networkState == NetworkState.initializing) {
-      return const EmptyNetworkState(state: NetworkState.initializing);
+    if (viewModel.networkState == NetworkState.initializing) {
+      return widget.EmptyNetworkState(state: widget.NetworkState.initializing);
     }
 
     // Show devices list if available
     if (connectedDevices.isNotEmpty) {
       return RefreshIndicator(
-        onRefresh: _refreshNetwork,
+        onRefresh: () => _refreshNetwork(viewModel),
         color: BeaconColors.primary,
         child: ListView.builder(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -265,42 +216,20 @@ class _NetworkDashboardState extends State<NetworkDashboard> {
     }
 
     // Show searching state
-    return const EmptyNetworkState(state: NetworkState.searching);
+    return widget.EmptyNetworkState(state: widget.NetworkState.searching);
   }
 
 
-  Future<void> _refreshNetwork() async {
-    if (_isRefreshing) return;
+  Future<void> _refreshNetwork(NetworkDashboardViewModel viewModel) async {
+    await viewModel.refreshNetwork();
 
-    setState(() {
-      _isRefreshing = true;
-    });
+    if (!mounted) return;
 
-    try {
-      final p2pService = Provider.of<P2PService>(context, listen: false);
-
-      // Restart discovery
-      await p2pService.stopDiscovery();
-      await Future.delayed(const Duration(milliseconds: 500));
-      final success = await p2pService.startDiscovery();
-
-      if (!mounted) return;
-
-      if (success) {
-        _showSuccessMessage('🔄 Network refreshed');
-      } else {
-        _showErrorMessage('Failed to refresh network');
-      }
-    } catch (e) {
-      if (mounted) {
-        _showErrorMessage('Error refreshing: ${e.toString()}');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRefreshing = false;
-        });
-      }
+    if (viewModel.errorMessage != null) {
+      _showErrorMessage(viewModel.errorMessage!);
+      viewModel.clearError();
+    } else {
+      _showSuccessMessage('🔄 Network refreshed');
     }
   }
 
