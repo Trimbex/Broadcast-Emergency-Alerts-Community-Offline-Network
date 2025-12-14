@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:io';
 import '../widgets/common/voice_command_button.dart';
 import '../widgets/common/theme_toggle_button.dart';
 import '../widgets/landing_page/welcome_header.dart';
@@ -44,49 +45,65 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
+  Future<void> _refreshUserName() async {
+    await _loadUserInfo();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
-      ),
-      floatingActionButton: const VoiceCommandButton(isCompact: false),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 16),
+    return WillPopScope(
+      onWillPop: () async {
+        // Exit the app when back button is pressed
+        exit(0);
+      },
+      child: Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () {
+              exit(0);
+            },
+          ),
+          actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
+        ),
+        floatingActionButton: const VoiceCommandButton(isCompact: false),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        body: SafeArea(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
 
-                    // Welcome Header
-                    WelcomeHeader(userName: _userName),
+                      // Welcome Header
+                      WelcomeHeader(userName: _userName),
 
-                    const SizedBox(height: 32),
+                      const SizedBox(height: 32),
 
-                    // Main Action Button
-                    _buildMainActionButton(context),
+                      // Main Action Button
+                      _buildMainActionButton(context),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                    // Quick Access Grid
-                    _buildQuickAccessGrid(context),
+                      // Quick Access Grid
+                      _buildQuickAccessGrid(context),
 
-                    const SizedBox(height: 24),
+                      const SizedBox(height: 24),
 
-                    // Quick Stats
-                    const QuickStatsWidget(),
+                      // Quick Stats
+                      const QuickStatsWidget(),
 
-                    const SizedBox(height: 32),
-                  ],
+                      const SizedBox(height: 32),
+                    ],
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -141,7 +158,11 @@ class _LandingPageState extends State<LandingPage> {
                 icon: Icons.person,
                 label: 'Profile',
                 color: BeaconColors.primary,
-                onTap: () => Navigator.pushNamed(context, '/profile'),
+                onTap: () async {
+                  await Navigator.pushNamed(context, '/profile');
+                  // Refresh the user name when returning from profile
+                  await _refreshUserName();
+                },
               ),
             ),
             const SizedBox(width: 12),

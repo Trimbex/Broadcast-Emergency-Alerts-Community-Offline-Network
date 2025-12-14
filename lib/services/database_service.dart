@@ -45,7 +45,7 @@ class DatabaseService {
           CREATE TABLE IF NOT EXISTS emergency_contacts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            relation TEXT NOT NULL,
+            relation TEXT,
             phone TEXT NOT NULL,
             device_id TEXT NOT NULL,
             created_at INTEGER NOT NULL,
@@ -54,6 +54,13 @@ class DatabaseService {
         ''');
       } catch (e) {
         // Table might already exist, ignore error
+      }
+
+      // Alter emergency_contacts table to make relation nullable
+      try {
+        await db.execute('ALTER TABLE emergency_contacts MODIFY relation TEXT');
+      } catch (e) {
+        // Column might already be nullable, ignore error
       }
     }
   }
@@ -79,7 +86,7 @@ class DatabaseService {
       CREATE TABLE emergency_contacts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        relation TEXT NOT NULL,
+        relation TEXT,
         phone TEXT NOT NULL,
         device_id TEXT NOT NULL,
         created_at INTEGER NOT NULL,
