@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/common/theme_toggle_button.dart';
@@ -6,6 +5,7 @@ import '../widgets/resource_sharing_page/resource_card.dart';
 import '../widgets/resource_sharing_page/stat_item.dart';
 import '../models/resource_model.dart';
 import '../services/p2p_service.dart';
+import '../viewmodels/resource_sharing_viewmodel.dart';
 import '../theme/beacon_colors.dart';
 
 class ResourceSharingPage extends StatefulWidget {
@@ -16,74 +16,62 @@ class ResourceSharingPage extends StatefulWidget {
 }
 
 class _ResourceSharingPageState extends State<ResourceSharingPage> {
-  String _selectedCategory = 'All';
-  final List<String> _categories = ['All', 'Medical', 'Food', 'Shelter', 'Water', 'Other'];
-  
-  // Stream subscription for network resources
-  StreamSubscription<ResourceModel>? _resourceSubscription;
-  StreamSubscription<Map<String, dynamic>>? _resourceRequestSubscription;
-  
+  ResourceSharingViewModel? _viewModel;
 
   @override
   void initState() {
     super.initState();
-    // Listen to resource updates from network
     final p2pService = Provider.of<P2PService>(context, listen: false);
-    _resourceSubscription = p2pService.resourceStream.listen((resource) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-    
-    // Listen to resource requests
-    _resourceRequestSubscription = p2pService.resourceRequestStream.listen((requestData) {
-      if (mounted) {
-        _showResourceRequestDialog(requestData);
-      }
-    });
+    _viewModel = ResourceSharingViewModel(p2pService: p2pService);
+    _viewModel!.initialize();
   }
 
   @override
   void dispose() {
-    _resourceSubscription?.cancel();
-    _resourceRequestSubscription?.cancel();
+    _viewModel?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final p2pService = Provider.of<P2PService>(context);
-    
-    // Get all network resources (includes both local and remote)
-    final allResources = p2pService.networkResources;
-    
-    // Remove duplicates (same id and deviceId)
-    final uniqueResources = <String, ResourceModel>{};
-    for (var resource in allResources) {
-      final key = '${resource.id}_${resource.deviceId ?? "unknown"}';
-      if (!uniqueResources.containsKey(key)) {
-        uniqueResources[key] = resource;
-      }
+    if (_viewModel == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
-    
-    final filteredResources = _selectedCategory == 'All'
-        ? uniqueResources.values.toList()
-        : uniqueResources.values.where((r) => r.category == _selectedCategory).toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Resource Sharing'),
-        actions: const [
-          ThemeToggleButton(isCompact: true),
-          SizedBox(width: 8),
-        ],
+    return ChangeNotifierProvider<ResourceSharingViewModel>.value(
+      value: _viewModel!,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Resource Sharing'),
+          actions: const [
+            ThemeToggleButton(isCompact: true),
+            SizedBox(width: 8),
+          ],
+        ),
+        body: Consumer2<ResourceSharingViewModel, P2PService>(
+          builder: (context, viewModel, p2pService, child) {
+            // Listen to resource requests
+            viewModel.resourceRequestStream.listen((requestData) {
+              if (mounted) {
+                _showResourceRequestDialog(requestData);
+              }
+            });
+
+            return _buildResourcesView(viewModel, p2pService, viewModel.filteredResources);
+          },
+        ),
       ),
-      body: _buildResourcesView(p2pService, filteredResources),
     );
   }
 
 
-  Widget _buildResourcesView(P2PService p2pService, List<ResourceModel> filteredResources) {
+  Widget _buildResourcesView(
+    ResourceSharingViewModel viewModel,
+    P2PService p2pService,
+    List<ResourceModel> filteredResources,
+  ) {
     return Column(
       children: [
         // Category Filter
@@ -93,19 +81,17 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _categories.length,
+            itemCount: viewModel.categories.length,
             itemBuilder: (context, index) {
-              final category = _categories[index];
-              final isSelected = category == _selectedCategory;
+              final category = viewModel.categories[index];
+              final isSelected = category == viewModel.selectedCategory;
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: FilterChip(
                   label: Text(category),
                   selected: isSelected,
                   onSelected: (selected) {
-                    setState(() {
-                      _selectedCategory = category;
-                    });
+                    viewModel.setCategory(category);
                   },
                   backgroundColor: BeaconColors.surface(context),
                   selectedColor: BeaconColors.primary.withOpacity(0.2),
@@ -438,6 +424,9 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
 
   void _showAddResourceDialog() {
     final p2pService = Provider.of<P2PService>(context, listen: false);
+    final viewModel = _viewModel;
+    if (viewModel == null) return;
+
     final nameController = TextEditingController();
     final quantityController = TextEditingController();
     final locationController = TextEditingController();
@@ -465,7 +454,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
                   labelText: 'Category',
                   border: OutlineInputBorder(),
                 ),
-                items: _categories
+                items: viewModel.categories
                     .where((c) => c != 'All')
                     .map((category) => DropdownMenuItem(
                           value: category,
