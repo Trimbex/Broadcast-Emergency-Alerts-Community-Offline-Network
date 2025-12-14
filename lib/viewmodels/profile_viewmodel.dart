@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
-import '../services/p2p_service.dart';
 import 'base_viewmodel.dart';
 
 /// Emergency contact model
@@ -30,12 +29,12 @@ class EmergencyContact {
 /// ViewModel for ProfilePage
 /// Manages user profile and emergency contacts
 class ProfileViewModel extends BaseViewModel {
-  final DatabaseService _databaseService;
-  final P2PService _p2pService;
+  final dynamic _databaseService;
+  final dynamic _p2pService;
 
   ProfileViewModel({
-    required P2PService p2pService,
-    DatabaseService? databaseService,
+    required dynamic p2pService,
+    dynamic databaseService,
   })  : _p2pService = p2pService,
         _databaseService = databaseService ?? DatabaseService.instance;
 
@@ -93,7 +92,7 @@ class ProfileViewModel extends BaseViewModel {
       // Load emergency contacts
       if (_deviceId != null) {
         final contacts = await _databaseService.getEmergencyContacts(_deviceId!);
-        _emergencyContacts = contacts.map((contact) {
+        _emergencyContacts = contacts.map<EmergencyContact>((contact) {
           return EmergencyContact(
             id: contact['id'] as int,
             name: contact['name'] as String,

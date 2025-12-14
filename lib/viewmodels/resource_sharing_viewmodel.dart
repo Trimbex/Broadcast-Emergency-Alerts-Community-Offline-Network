@@ -1,14 +1,13 @@
 import 'dart:async';
 import '../models/resource_model.dart';
-import '../services/p2p_service.dart';
 import 'base_viewmodel.dart';
 
 /// ViewModel for ResourceSharingPage
 /// Manages resources, filtering, and resource requests
 class ResourceSharingViewModel extends BaseViewModel {
-  final P2PService _p2pService;
+  final dynamic _p2pService;
 
-  ResourceSharingViewModel({required P2PService p2pService})
+  ResourceSharingViewModel({required dynamic p2pService})
       : _p2pService = p2pService;
 
   // UI State

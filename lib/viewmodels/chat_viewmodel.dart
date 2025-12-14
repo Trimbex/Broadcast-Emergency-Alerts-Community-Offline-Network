@@ -1,19 +1,18 @@
 import 'dart:async';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
-import '../services/p2p_service.dart';
 import '../services/database_service.dart';
 import 'base_viewmodel.dart';
 
 /// ViewModel for ChatPage
 /// Manages chat state, messages, and communication with services
 class ChatViewModel extends BaseViewModel {
-  final P2PService _p2pService;
-  final DatabaseService _databaseService;
+  final dynamic _p2pService;
+  final dynamic _databaseService;
 
   ChatViewModel({
-    required P2PService p2pService,
-    DatabaseService? databaseService,
+    required dynamic p2pService,
+    dynamic databaseService,
   })  : _p2pService = p2pService,
         _databaseService = databaseService ?? DatabaseService.instance;
 
