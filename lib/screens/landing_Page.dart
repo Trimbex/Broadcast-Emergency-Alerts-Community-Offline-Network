@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import '../widgets/common/voice_command_button.dart';
 import '../widgets/common/theme_toggle_button.dart';
 import '../widgets/landing_page/welcome_header.dart';
 import '../widgets/landing_page/quick_access_card.dart';
 import '../widgets/landing_page/quick_stats_widget.dart';
 import '../theme/beacon_colors.dart';
 import '../services/database_service.dart';
+import '../services/beacon_voice_commands.dart';
+import '../services/p2p_service.dart';
+import '../widgets/common/voice_command_listener.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -18,11 +20,106 @@ class LandingPage extends StatefulWidget {
 class _LandingPageState extends State<LandingPage> {
   String? _userName;
   bool _isLoading = true;
+  late BeaconVoiceCommands _voiceCommands;
 
   @override
   void initState() {
     super.initState();
     _loadUserInfo();
+    _initializeVoiceCommands();
+  }
+
+  void _initializeVoiceCommands() {
+    _voiceCommands = BeaconVoiceCommands();
+    // Initialize voice commands asynchronously
+    _voiceCommands.initialize(
+      p2pService: P2PService(),
+      onCallEmergency: _handleCallEmergency,
+      onShareLocation: _handleShareLocation,
+      onShowResourcesPage: _handleShowResources,
+      onShowNetworkPage: _handleShowNetwork,
+      onShowProfilePage: _handleShowProfile,
+      onSendMessage: _handleSendMessage,
+    ).then((success) {
+      if (success) {
+        print('✅ Voice commands initialized successfully');
+      } else {
+        print('❌ Failed to initialize voice commands');
+      }
+    }).catchError((error) {
+      print('❌ Voice command initialization error: $error');
+    });
+
+    // Subscribe to callbacks for UI feedback
+    _voiceCommands.commandHandler.onCommandRecognized((command) {
+      print('🎤 Command Recognized: $command');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Recognized: $command'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    });
+
+    _voiceCommands.commandHandler.onCommandExecuted((command, feedback) {
+      print('✅ Command Executed: $command');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Executed: $command'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: BeaconColors.primary,
+          ),
+        );
+      }
+    });
+
+    _voiceCommands.commandHandler.onCommandFailed((error) {
+      print('❌ Command Failed: $error');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed: $error'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: BeaconColors.error,
+          ),
+        );
+      }
+    });
+  }
+
+  void _handleCallEmergency() {
+    print('✅ CallEmergency action triggered!');
+    Navigator.pushNamed(context, '/profile');
+  }
+
+  void _handleShareLocation() {
+    print('✅ ShareLocation action triggered!');
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Location shared!')),
+    );
+  }
+
+  void _handleShowResources() {
+    print('✅ ShowResources action triggered!');
+    Navigator.pushNamed(context, '/resources');
+  }
+
+  void _handleShowNetwork() {
+    print('✅ ShowNetwork action triggered!');
+    Navigator.pushNamed(context, '/network_dashboard', arguments: {'mode': 'join'});
+  }
+
+  void _handleShowProfile() {
+    print('✅ ShowProfile action triggered!');
+    Navigator.pushNamed(context, '/profile');
+  }
+
+  void _handleSendMessage(String message) {
+    print('✅ SendMessage action triggered!');
+    Navigator.pushNamed(context, '/chat');
   }
 
   Future<void> _loadUserInfo() async {
@@ -50,6 +147,12 @@ class _LandingPageState extends State<LandingPage> {
   }
 
   @override
+  void dispose() {
+    _voiceCommands.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
@@ -69,7 +172,17 @@ class _LandingPageState extends State<LandingPage> {
           ),
           actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
         ),
-        floatingActionButton: const VoiceCommandButton(isCompact: false),
+        floatingActionButton: VoiceCommandListener(
+          commandHandler: _voiceCommands.commandHandler,
+          activeColor: BeaconColors.error,
+          inactiveColor: BeaconColors.primary,
+          onListeningStart: () {
+            print('🎤 Listening for commands...');
+          },
+          onListeningStop: () {
+            // Status will be updated by callbacks
+          },
+        ),
         floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
         body: SafeArea(
           child: _isLoading
