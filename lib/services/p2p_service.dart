@@ -341,9 +341,10 @@ Future<bool> _requestPermissions() async {
       }
       
       // Add device to connected list
+      final deviceName = 'User-${endpointId.substring(0, 4)}';
       _connectedDevices[endpointId] = DeviceModel(
         id: endpointId,
-        name: 'User-${endpointId.substring(0, 4)}',
+        name: deviceName,
         status: 'Active',
         distance: 'Nearby',
         batteryLevel: 100, // Will be updated via messages
@@ -371,6 +372,12 @@ Future<bool> _requestPermissions() async {
       
       // Send initial handshake
       _sendHandshake(endpointId);
+      
+      // Send notification to alert host that a new device joined
+      NotificationService.instance.showDeviceJoinedNotification(
+        deviceName: deviceName,
+        payload: endpointId,
+      );
       
       // Note: Resources are now requested manually by user (on-demand)
     } else {

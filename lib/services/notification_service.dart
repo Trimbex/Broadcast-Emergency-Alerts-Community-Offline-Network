@@ -264,6 +264,54 @@ class NotificationService {
     }
   }
 
+  /// Show notification for new device joining the network
+  Future<void> showDeviceJoinedNotification({
+    required String deviceName,
+    String? payload,
+  }) async {
+    if (_notifications == null) {
+      debugPrint('⚠️ Notifications: Service not initialized');
+      return;
+    }
+    
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'beacon_emergency_channel',
+        'BEACON Emergency Notifications',
+        channelDescription: 'Notifications for emergency messages and resource requests',
+        importance: Importance.high,
+        priority: Priority.high,
+        playSound: true,
+        enableVibration: true,
+        icon: '@mipmap/ic_launcher',
+        styleInformation: BigTextStyleInformation(''),
+      );
+
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      const details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      await _notifications!.show(
+        DateTime.now().millisecondsSinceEpoch % 100000,
+        '🌐 Device Connected',
+        '$deviceName has joined the network',
+        details,
+        payload: payload,
+      );
+      
+      debugPrint('✅ Notifications: Sent device joined notification for $deviceName');
+    } catch (e) {
+      debugPrint('❌ Notifications: Failed to show device joined notification: $e');
+    }
+  }
+
   /// Cancel all notifications
   Future<void> cancelAll() async {
     await _notifications?.cancelAll();
