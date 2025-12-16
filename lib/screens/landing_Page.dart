@@ -8,7 +8,7 @@ import '../theme/beacon_colors.dart';
 import '../services/database_service.dart';
 import '../services/beacon_voice_commands.dart';
 import '../services/p2p_service.dart';
-import '../widgets/common/voice_command_listener.dart';
+import '../widgets/common/voice_command_listener_animated.dart';
 
 class LandingPage extends StatefulWidget {
   const LandingPage({super.key});
@@ -172,7 +172,7 @@ class _LandingPageState extends State<LandingPage> {
           ),
           actions: const [ThemeToggleButton(isCompact: true), SizedBox(width: 8)],
         ),
-        floatingActionButton: VoiceCommandListener(
+        floatingActionButton: VoiceCommandListenerAnimated(
           commandHandler: _voiceCommands.commandHandler,
           activeColor: BeaconColors.error,
           inactiveColor: BeaconColors.primary,
