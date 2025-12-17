@@ -190,7 +190,7 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
-    _messageController.clear();
+    // Note: controller.clear() is now handled in MessageInputBar._handleSend()
 
     final success = await _viewModel!.sendMessage(messageText);
     if (success) {

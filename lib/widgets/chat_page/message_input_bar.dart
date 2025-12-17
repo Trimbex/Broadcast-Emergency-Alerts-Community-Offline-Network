@@ -31,12 +31,7 @@ class _MessageInputBarState extends State<MessageInputBar> {
 
   Future<void> _toggleListening() async {
     if (_isListening) {
-      await _speechService.stopListening();
-      final recognizedText = _speechService.getRecognizedText();
-      if (recognizedText.isNotEmpty) {
-        widget.controller.text = recognizedText;
-      }
-      setState(() => _isListening = false);
+      await _stopListening();
     } else {
       final success = await _speechService.startListening(
         onTextUpdate: (text) {
@@ -57,6 +52,24 @@ class _MessageInputBarState extends State<MessageInputBar> {
         }
       }
     }
+  }
+
+  Future<void> _stopListening() async {
+    if (_isListening) {
+      await _speechService.stopListening();
+      if (mounted) {
+        setState(() => _isListening = false);
+      }
+    }
+  }
+
+  void _handleSend() {
+    // Stop listening if active
+    _stopListening();
+    // Call the send callback
+    widget.onSend();
+    // Clear the text field
+    widget.controller.clear();
   }
 
   @override
@@ -118,7 +131,7 @@ class _MessageInputBarState extends State<MessageInputBar> {
                     vertical: 12,
                   ),
                 ),
-                onSubmitted: (_) => widget.onSend(),
+                onSubmitted: (_) => _handleSend(),
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
               ),
@@ -161,7 +174,7 @@ class _MessageInputBarState extends State<MessageInputBar> {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: widget.isEnabled ? widget.onSend : null,
+                  onTap: widget.isEnabled ? _handleSend : null,
                   borderRadius: BorderRadius.circular(24),
                   child: Container(
                     width: 48,
