@@ -56,7 +56,7 @@ dependencies:
   
   # Speech and Audio
   flutter_tts: ^4.2.3
-  speech_to_text: ^6.6.2
+  speech_to_text: ^7.3.0
 
 
 

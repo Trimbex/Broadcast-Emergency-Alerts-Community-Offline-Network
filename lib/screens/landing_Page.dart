@@ -183,7 +183,7 @@ class _LandingPageState extends State<LandingPage> {
             // Status will be updated by callbacks
           },
         ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
         body: SafeArea(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())

@@ -7,7 +7,6 @@ import '../widgets/chat_page/connection_status_banner.dart';
 import '../widgets/chat_page/empty_chat_state.dart';
 import '../widgets/chat_page/message_input_bar.dart';
 import '../widgets/chat_page/quick_actions_bar.dart';
-import '../widgets/common/voice_command_listener_animated.dart';
 import '../models/device_model.dart';
 import '../services/p2p_service.dart';
 import '../services/beacon_voice_commands.dart';
@@ -144,19 +143,7 @@ class _ChatPageState extends State<ChatPage> {
             const ThemeToggleButton(isCompact: true),
           ],
         ),
-        floatingActionButton: VoiceCommandListenerAnimated(
-          commandHandler: _voiceCommands.commandHandler,
-          activeColor: BeaconColors.error,
-          inactiveColor: BeaconColors.primary,
-          size: 56,
-          onListeningStart: () {
-            print('🎤 Voice listening in chat');
-          },
-          onListeningStop: () {
-            print('🎤 Voice stopped in chat');
-          },
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        // Floating voice icon removed - speech-to-text is now integrated in MessageInputBar
         body: Consumer2<ChatViewModel, P2PService>(
           builder: (context, viewModel, p2pService, child) {
             final isConnected = viewModel.isConnected;

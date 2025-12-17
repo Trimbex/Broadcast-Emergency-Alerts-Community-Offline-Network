@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../widgets/common/voice_command_button.dart';
 import '../../theme/beacon_colors.dart';
+import '../../services/speech_service.dart';
 
-class MessageInputBar extends StatelessWidget {
+class MessageInputBar extends StatefulWidget {
   final TextEditingController controller;
   final VoidCallback onSend;
   final bool isEnabled;
@@ -13,6 +13,57 @@ class MessageInputBar extends StatelessWidget {
     required this.onSend,
     this.isEnabled = true,
   });
+
+  @override
+  State<MessageInputBar> createState() => _MessageInputBarState();
+}
+
+class _MessageInputBarState extends State<MessageInputBar> {
+  late SpeechService _speechService;
+  bool _isListening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _speechService = SpeechService();
+    _speechService.initialize();
+  }
+
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _speechService.stopListening();
+      final recognizedText = _speechService.getRecognizedText();
+      if (recognizedText.isNotEmpty) {
+        widget.controller.text = recognizedText;
+      }
+      setState(() => _isListening = false);
+    } else {
+      final success = await _speechService.startListening(
+        onTextUpdate: (text) {
+          // Update text field in real-time as speech is recognized
+          widget.controller.text = text;
+        },
+      );
+      if (success) {
+        setState(() => _isListening = true);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Failed to start listening'),
+              backgroundColor: BeaconColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _speechService.stopListening();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,11 +82,12 @@ class MessageInputBar extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Expanded(
               child: TextField(
-                controller: controller,
-                enabled: isEnabled,
+                controller: widget.controller,
+                enabled: widget.isEnabled,
                 decoration: InputDecoration(
                   hintText: 'Type a message...',
                   filled: true,
@@ -66,13 +118,38 @@ class MessageInputBar extends StatelessWidget {
                     vertical: 12,
                   ),
                 ),
-                onSubmitted: (_) => onSend(),
+                onSubmitted: (_) => widget.onSend(),
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
               ),
             ),
             const SizedBox(width: 8),
-            const VoiceCommandButton(isCompact: true),
+            // Speech-to-text button - Green when listening, Orange when idle
+            Container(
+              decoration: BoxDecoration(
+                color: _isListening 
+                    ? Colors.green // Green when listening
+                    : const Color(0xFFFF8C42), // Orange when idle
+                shape: BoxShape.circle,
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: widget.isEnabled ? _toggleListening : null,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    alignment: Alignment.center,
+                    child: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(width: 8),
             Container(
               decoration: BoxDecoration(
@@ -84,7 +161,7 @@ class MessageInputBar extends StatelessWidget {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: isEnabled ? onSend : null,
+                  onTap: widget.isEnabled ? widget.onSend : null,
                   borderRadius: BorderRadius.circular(24),
                   child: Container(
                     width: 48,

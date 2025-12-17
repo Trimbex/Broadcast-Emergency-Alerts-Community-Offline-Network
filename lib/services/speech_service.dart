@@ -14,6 +14,7 @@ class SpeechService {
   bool _isListening = false;
   bool _isSpeaking = false;
   String _recognizedText = '';
+  Function(String)? _onTextUpdate;
 
   // Getters
   bool get isListening => _isListening;
@@ -110,7 +111,8 @@ class SpeechService {
   }
 
   /// Start listening for speech
-  Future<bool> startListening() async {
+  /// [onTextUpdate] callback is called whenever text is recognized (including partial results)
+  Future<bool> startListening({Function(String)? onTextUpdate}) async {
     try {
       // Request microphone permission
       final microphoneStatus = await Permission.microphone.request();
@@ -137,6 +139,7 @@ class SpeechService {
 
       _isListening = true;
       _recognizedText = '';
+      _onTextUpdate = onTextUpdate;
 
       print('🎤 About to call _speechToText.listen()...');
       try {
@@ -145,6 +148,8 @@ class SpeechService {
             _recognizedText = result.recognizedWords;
             debugPrint('📝 Speech Recognition: "${result.recognizedWords}"');
             print('✅ Got speech result: "${result.recognizedWords}"');
+            // Call the callback if provided
+            _onTextUpdate?.call(result.recognizedWords);
           },
           localeId: 'en_US',
           pauseFor: const Duration(seconds: 3),
@@ -179,6 +184,7 @@ class SpeechService {
       if (_isListening) {
         await _speechToText.stop();
         _isListening = false;
+        _onTextUpdate = null;
         debugPrint('🛑 Speech Recognition: Stopped listening');
       }
     } catch (e) {
@@ -193,6 +199,7 @@ class SpeechService {
         await _speechToText.cancel();
         _isListening = false;
         _recognizedText = '';
+        _onTextUpdate = null;
         debugPrint('❌ Speech Recognition: Cancelled');
       }
     } catch (e) {
