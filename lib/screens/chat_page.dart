@@ -9,6 +9,7 @@ import '../widgets/chat_page/message_input_bar.dart';
 import '../widgets/chat_page/quick_actions_bar.dart';
 import '../models/device_model.dart';
 import '../services/p2p_service.dart';
+import '../services/beacon_voice_commands.dart';
 import '../viewmodels/chat_viewmodel.dart';
 import '../theme/beacon_colors.dart';
 
@@ -23,14 +24,54 @@ class _ChatPageState extends State<ChatPage> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   ChatViewModel? _viewModel;
+  late BeaconVoiceCommands _voiceCommands;
 
   @override
   void initState() {
     super.initState();
+    _initializeVoiceCommands();
 
     // Wait for widget to fully build before accessing context
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeChat();
+    });
+  }
+
+  void _initializeVoiceCommands() {
+    _voiceCommands = BeaconVoiceCommands();
+    // Initialize voice commands for chat page
+    _voiceCommands.initialize(
+      p2pService: P2PService(),
+      onCallEmergency: () {
+        print('✅ Voice: Send emergency in chat');
+        _sendQuickMessage('🚨 EMERGENCY', true);
+      },
+      onShareLocation: () {
+        print('✅ Voice: Share location in chat');
+        _sendQuickMessage('📍 Here is my location', false);
+      },
+      onShowResourcesPage: () {
+        print('✅ Voice: Request resources');
+        _sendQuickMessage('📦 Can you share resources?', false);
+      },
+      onShowNetworkPage: () {
+        print('✅ Voice: Check network');
+        Navigator.pop(context);
+      },
+      onShowProfilePage: () {
+        print('✅ Voice: Show profile');
+        // Stay in chat
+      },
+      onSendMessage: (message) {
+        print('✅ Voice: Send message');
+        if (message.isEmpty) {
+          // Just trigger send
+          _sendMessage();
+        }
+      },
+    ).catchError((error) {
+      print('❌ Voice init error in chat: $error');
+      return false;
     });
   }
 
@@ -71,6 +112,7 @@ class _ChatPageState extends State<ChatPage> {
     _messageController.dispose();
     _scrollController.dispose();
     _viewModel?.dispose();
+    _voiceCommands.dispose();
     super.dispose();
   }
 
@@ -101,6 +143,7 @@ class _ChatPageState extends State<ChatPage> {
             const ThemeToggleButton(isCompact: true),
           ],
         ),
+        // Floating voice icon removed - speech-to-text is now integrated in MessageInputBar
         body: Consumer2<ChatViewModel, P2PService>(
           builder: (context, viewModel, p2pService, child) {
             final isConnected = viewModel.isConnected;
@@ -147,7 +190,7 @@ class _ChatPageState extends State<ChatPage> {
       return;
     }
 
-    _messageController.clear();
+    // Note: controller.clear() is now handled in MessageInputBar._handleSend()
 
     final success = await _viewModel!.sendMessage(messageText);
     if (success) {

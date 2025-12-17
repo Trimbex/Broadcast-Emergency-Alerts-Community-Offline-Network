@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'database_service.dart';
 import 'notification_service.dart';
+import 'speech_service.dart';
 
 /// P2P Communication Service using Nearby Connections API
 /// 
@@ -82,6 +83,15 @@ class P2PService extends ChangeNotifier {
     
     // Initialize notification service
     await NotificationService.instance.initialize();
+    
+    // Initialize speech service for text-to-speech and speech recognition
+    try {
+      await SpeechService().initialize();
+      debugPrint('✅ P2P: Speech service initialized');
+    } catch (e) {
+      debugPrint('⚠️ P2P: Failed to initialize speech service: $e');
+      // Continue even if speech service fails
+    }
     
     // Load local resources from database
     await _loadLocalResources();
