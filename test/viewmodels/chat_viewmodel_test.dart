@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:flutter_application/viewmodels/chat_viewmodel.dart';
 import 'package:flutter_application/models/device_model.dart';
 import 'package:flutter_application/models/message_model.dart';
-import '../mocks/mock_services.dart';
+import '../mocks/mock_services.mocks.dart';
 
 void main() {
   group('ChatViewModel Tests', () {
@@ -13,6 +15,10 @@ void main() {
     setUp(() {
       mockP2PService = MockP2PService();
       mockDatabaseService = MockDatabaseService();
+      
+      // Default stubs to prevent null errors during initialization checks or constructor usage
+      when(mockP2PService.connectedDevices).thenReturn([]);
+      
       viewModel = ChatViewModel(
         p2pService: mockP2PService,
         databaseService: mockDatabaseService,
@@ -53,7 +59,12 @@ void main() {
         ),
       ];
 
-      mockDatabaseService.setMessages(messages);
+      // Stub mocks
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      when(mockDatabaseService.getMessages('endpoint1')).thenAnswer((_) async => messages);
+      when(mockDatabaseService.getMessages('device1')).thenAnswer((_) async => []); // Different ID check
+      when(mockP2PService.getMessageHistoryForDevice('endpoint1', 'device1')).thenReturn([]);
+      when(mockP2PService.getMessageStream('endpoint1')).thenAnswer((_) => Stream.empty());
 
       // Act
       await viewModel.initialize(device);
@@ -65,7 +76,7 @@ void main() {
       expect(viewModel.isLoading, isFalse);
     });
 
-    test('Send message should add message to list', () async {
+    test('Send message should add message to list and call service', () async {
       // Arrange
       final device = DeviceModel(
         id: 'device1',
@@ -75,14 +86,25 @@ void main() {
         batteryLevel: 80,
         endpointId: 'endpoint1',
       );
+      
+      // Setup initialization stubs
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      when(mockDatabaseService.getMessages(any)).thenAnswer((_) async => []);
+      when(mockP2PService.getMessageHistoryForDevice(any, any)).thenReturn([]);
+      when(mockP2PService.getMessageStream(any)).thenAnswer((_) => Stream.empty());
+      
       await viewModel.initialize(device);
+
+      // Setup sendMessage stub
+      when(mockP2PService.sendMessage(any, any)).thenAnswer((_) async {});
 
       // Act
       final result = await viewModel.sendMessage('Test message');
 
       // Assert
       expect(result, isTrue);
-      expect(mockP2PService.lastSentMessage, equals('Test message'));
+      // Verify P2P service was called with correct arguments
+      verify(mockP2PService.sendMessage('endpoint1', 'Test message')).called(1);
     });
 
     test('Send empty message should return false', () async {
@@ -95,6 +117,13 @@ void main() {
         batteryLevel: 80,
         endpointId: 'endpoint1',
       );
+      
+      // Setup initialization stubs
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      when(mockDatabaseService.getMessages(any)).thenAnswer((_) async => []);
+      when(mockP2PService.getMessageHistoryForDevice(any, any)).thenReturn([]);
+      when(mockP2PService.getMessageStream(any)).thenAnswer((_) => Stream.empty());
+      
       await viewModel.initialize(device);
 
       // Act
@@ -102,6 +131,7 @@ void main() {
 
       // Assert
       expect(result, isFalse);
+      verifyNever(mockP2PService.sendMessage(any, any));
     });
 
     test('Send quick message should broadcast emergency', () async {
@@ -114,14 +144,24 @@ void main() {
         batteryLevel: 80,
         endpointId: 'endpoint1',
       );
+      
+      // Setup initialization stubs
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      when(mockDatabaseService.getMessages(any)).thenAnswer((_) async => []);
+      when(mockP2PService.getMessageHistoryForDevice(any, any)).thenReturn([]);
+      when(mockP2PService.getMessageStream(any)).thenAnswer((_) => Stream.empty());
+      
       await viewModel.initialize(device);
+
+      // Setup broadcastEmergencyAlert stub
+      when(mockP2PService.broadcastEmergencyAlert(any)).thenAnswer((_) async {});
 
       // Act
       final result = await viewModel.sendQuickMessage('SOS', isEmergency: true);
 
       // Assert
       expect(result, isTrue);
-      expect(mockP2PService.lastEmergencyAlert, equals('SOS'));
+      verify(mockP2PService.broadcastEmergencyAlert('SOS')).called(1);
     });
 
     test('isConnected should return true when device is in connected list', () async {
@@ -134,7 +174,15 @@ void main() {
         batteryLevel: 80,
         endpointId: 'endpoint1',
       );
-      mockP2PService.addConnectedDevice(device);
+      
+      // Stub connectedDevices to include our device
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      
+      // Other stubs for initialize
+      when(mockDatabaseService.getMessages(any)).thenAnswer((_) async => []);
+      when(mockP2PService.getMessageHistoryForDevice(any, any)).thenReturn([]);
+      when(mockP2PService.getMessageStream(any)).thenAnswer((_) => Stream.empty());
+      
       await viewModel.initialize(device);
 
       // Assert
@@ -151,7 +199,10 @@ void main() {
         batteryLevel: 80,
         endpointId: 'endpoint1',
       );
-      mockDatabaseService.shouldThrowError = true;
+
+      // Stub database to throw error
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      when(mockDatabaseService.getMessages(any)).thenThrow(Exception('Database error'));
 
       // Act
       await viewModel.initialize(device);

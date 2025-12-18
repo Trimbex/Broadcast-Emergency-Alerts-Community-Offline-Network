@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:flutter_application/viewmodels/resource_sharing_viewmodel.dart';
 import 'package:flutter_application/models/resource_model.dart';
-import '../mocks/mock_services.dart';
+import '../mocks/mock_services.mocks.dart';
 
 void main() {
   group('ResourceSharingViewModel Tests', () {
@@ -10,6 +11,13 @@ void main() {
 
     setUp(() {
       mockP2PService = MockP2PService();
+      
+      // Default stubs
+      when(mockP2PService.networkResources).thenReturn([]);
+      when(mockP2PService.localDeviceId).thenReturn('device1');
+      when(mockP2PService.resourceStream).thenAnswer((_) => Stream.empty());
+      when(mockP2PService.resourceRequestStream).thenAnswer((_) => Stream.empty());
+      
       viewModel = ResourceSharingViewModel(p2pService: mockP2PService);
     });
 
@@ -40,6 +48,7 @@ void main() {
         location: 'Shelter A',
         provider: 'John',
         status: 'Available',
+        deviceId: 'device2',
       );
       final resource2 = ResourceModel(
         id: '2',
@@ -49,9 +58,10 @@ void main() {
         location: 'Shelter B',
         provider: 'Jane',
         status: 'Available',
+        deviceId: 'device3',
       );
-      mockP2PService.addResource(resource1);
-      mockP2PService.addResource(resource2);
+      
+      when(mockP2PService.networkResources).thenReturn([resource1, resource2]);
 
       // Act
       viewModel.setCategory('All');
@@ -70,6 +80,7 @@ void main() {
         location: 'Shelter A',
         provider: 'John',
         status: 'Available',
+        deviceId: 'device2',
       );
       final resource2 = ResourceModel(
         id: '2',
@@ -79,9 +90,10 @@ void main() {
         location: 'Shelter B',
         provider: 'Jane',
         status: 'Available',
+        deviceId: 'device3',
       );
-      mockP2PService.addResource(resource1);
-      mockP2PService.addResource(resource2);
+      
+      when(mockP2PService.networkResources).thenReturn([resource1, resource2]);
 
       // Act
       viewModel.setCategory('Medical');
@@ -102,13 +114,14 @@ void main() {
         provider: 'Test User',
         status: 'Available',
       );
+      
+      when(mockP2PService.broadcastResource(any)).thenAnswer((_) async {});
 
       // Act
       await viewModel.addResource(resource);
 
       // Assert
-      expect(mockP2PService.broadcastedResources.length, equals(1));
-      expect(mockP2PService.broadcastedResources.first.name, equals('First Aid Kit'));
+      verify(mockP2PService.broadcastResource(resource)).called(1);
     });
 
     test('Available count should count non-unavailable resources', () {
@@ -121,6 +134,7 @@ void main() {
         location: 'Shelter A',
         provider: 'John',
         status: 'Available',
+        deviceId: 'device2',
       );
       final resource2 = ResourceModel(
         id: '2',
@@ -130,9 +144,10 @@ void main() {
         location: 'Shelter B',
         provider: 'Jane',
         status: 'Unavailable',
+        deviceId: 'device3',
       );
-      mockP2PService.addResource(resource1);
-      mockP2PService.addResource(resource2);
+      
+      when(mockP2PService.networkResources).thenReturn([resource1, resource2]);
 
       // Assert
       expect(viewModel.availableCount, equals(1));
@@ -145,6 +160,8 @@ void main() {
       const endpointId = 'endpoint1';
       const quantity = 5;
       const requesterName = 'Test User';
+      
+      when(mockP2PService.requestSpecificResource(any, any, any, any)).thenAnswer((_) async {});
 
       // Act
       await viewModel.requestResource(
@@ -156,8 +173,12 @@ void main() {
       );
 
       // Assert
-      expect(mockP2PService.lastResourceRequest, isNotNull);
-      expect(mockP2PService.lastResourceRequest!['resourceId'], equals(resourceId));
+      verify(mockP2PService.requestSpecificResource(
+        endpointId,
+        resourceId,
+        quantity,
+        requesterName,
+      )).called(1);
     });
   });
 }

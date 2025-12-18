@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:flutter_application/viewmodels/profile_viewmodel.dart';
-import '../mocks/mock_services.dart';
+import '../mocks/mock_services.mocks.dart';
 
 void main() {
   group('ProfileViewModel Tests', () {
@@ -11,6 +12,12 @@ void main() {
     setUp(() {
       mockP2PService = MockP2PService();
       mockDatabaseService = MockDatabaseService();
+      
+      // Default stub for localDeviceId (often accessed during init or save)
+      when(mockP2PService.localDeviceId).thenReturn('device123');
+      // Stub for emergency contacts
+      when(mockDatabaseService.getEmergencyContacts(any)).thenAnswer((_) async => []);
+
       viewModel = ProfileViewModel(
         p2pService: mockP2PService,
         databaseService: mockDatabaseService,
@@ -30,12 +37,12 @@ void main() {
 
     test('Initialize should load profile from database', () async {
       // Arrange
-      mockP2PService.localDeviceId = 'device123';
-      mockDatabaseService.setUserProfile({
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {
         'name': 'John Doe',
         'phone': '1234567890',
         'blood_type': 'O+',
         'medical_conditions': 'None',
+        'device_id': 'device123',
       });
 
       // Act
@@ -60,7 +67,16 @@ void main() {
 
     test('Save profile with valid data should succeed', () async {
       // Arrange
-      mockP2PService.localDeviceId = 'device123';
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => null); // Start empty
+      when(mockDatabaseService.saveUserProfile(
+        name: anyNamed('name'),
+        deviceId: anyNamed('deviceId'),
+        phone: anyNamed('phone'),
+        role: anyNamed('role'),
+        bloodType: anyNamed('bloodType'),
+        medicalConditions: anyNamed('medicalConditions'),
+      )).thenAnswer((_) async {});
+
       await viewModel.initialize();
       viewModel.updateField(
         name: 'John Doe',
@@ -73,15 +89,23 @@ void main() {
       // Assert
       expect(result, isTrue);
       expect(viewModel.errorMessage, isNull);
+      verify(mockDatabaseService.saveUserProfile(
+        name: 'John Doe',
+        deviceId: 'device123',
+        phone: '1234567890',
+        role: anyNamed('role'),
+        bloodType: anyNamed('bloodType'),
+        medicalConditions: anyNamed('medicalConditions'),
+      )).called(1);
     });
 
     test('Save profile with invalid phone should fail', () async {
       // Arrange
-      mockP2PService.localDeviceId = 'device123';
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => null);
       await viewModel.initialize();
       viewModel.updateField(
         name: 'John Doe',
-        phone: 'invalid',
+        phone: 'invalid', // Invalid phone
       );
 
       // Act
@@ -90,6 +114,11 @@ void main() {
       // Assert
       expect(result, isFalse);
       expect(viewModel.errorMessage, isNotNull);
+      verifyNever(mockDatabaseService.saveUserProfile(
+        name: anyNamed('name'),
+        deviceId: anyNamed('deviceId'),
+        phone: anyNamed('phone'),
+      ));
     });
 
     test('Validate phone number should reject invalid formats', () {
@@ -105,7 +134,15 @@ void main() {
 
     test('Add emergency contact with valid data should succeed', () async {
       // Arrange
-      mockP2PService.localDeviceId = 'device123';
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'User'});
+      when(mockDatabaseService.saveEmergencyContact(
+        name: anyNamed('name'),
+        phone: anyNamed('phone'),
+        relation: anyNamed('relation'),
+        deviceId: anyNamed('deviceId'),
+      )).thenAnswer((_) async {});
+      when(mockDatabaseService.getEmergencyContacts(any)).thenAnswer((_) async => []); // Return empty list after add for reload
+
       await viewModel.initialize();
 
       // Act
@@ -118,11 +155,17 @@ void main() {
       // Assert
       expect(result, isTrue);
       expect(viewModel.errorMessage, isNull);
+      verify(mockDatabaseService.saveEmergencyContact(
+        name: 'Emergency Contact',
+        phone: '1234567890',
+        relation: 'Friend',
+        deviceId: 'device123',
+      )).called(1);
     });
 
     test('Add emergency contact with invalid phone should fail', () async {
       // Arrange
-      mockP2PService.localDeviceId = 'device123';
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'User'});
       await viewModel.initialize();
 
       // Act
@@ -135,19 +178,33 @@ void main() {
       // Assert
       expect(result, isFalse);
       expect(viewModel.errorMessage, isNotNull);
+      verifyNever(mockDatabaseService.saveEmergencyContact(
+        name: anyNamed('name'),
+        phone: anyNamed('phone'),
+        relation: anyNamed('relation'),
+        deviceId: anyNamed('deviceId'),
+      ));
     });
 
     test('Delete emergency contact should remove from list', () async {
       // Arrange
-      mockP2PService.localDeviceId = 'device123';
-      mockDatabaseService.addEmergencyContact({
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'User'});
+      // Initial contacts
+      when(mockDatabaseService.getEmergencyContacts(any)).thenAnswer((_) async => [{
         'id': 1,
         'name': 'Contact 1',
         'phone': '1234567890',
         'relation': 'Friend',
-      });
+        'device_id': 'device123',
+      }]);
+      // After delete (empty)
+      when(mockDatabaseService.deleteEmergencyContact(any)).thenAnswer((_) async {});
+      
       await viewModel.initialize();
       expect(viewModel.emergencyContacts.length, equals(1));
+      
+      // Update stub for reload after delete
+      when(mockDatabaseService.getEmergencyContacts(any)).thenAnswer((_) async => []);
 
       // Act
       final result = await viewModel.deleteEmergencyContact(1);
@@ -155,6 +212,7 @@ void main() {
       // Assert
       expect(result, isTrue);
       expect(viewModel.emergencyContacts, isEmpty);
+      verify(mockDatabaseService.deleteEmergencyContact(1)).called(1);
     });
   });
 }

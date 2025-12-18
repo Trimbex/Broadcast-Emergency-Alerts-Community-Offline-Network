@@ -1,7 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mockito/mockito.dart';
 import 'package:flutter_application/viewmodels/network_dashboard_viewmodel.dart';
 import 'package:flutter_application/models/device_model.dart';
-import '../mocks/mock_services.dart';
+import '../mocks/mock_services.mocks.dart';
 
 void main() {
   group('NetworkDashboardViewModel Tests', () {
@@ -12,6 +13,12 @@ void main() {
     setUp(() {
       mockP2PService = MockP2PService();
       mockDatabaseService = MockDatabaseService();
+      
+      // Default stubs
+      when(mockP2PService.isAdvertising).thenReturn(false);
+      when(mockP2PService.isDiscovering).thenReturn(false);
+      when(mockP2PService.connectedDevices).thenReturn([]);
+      
       viewModel = NetworkDashboardViewModel(
         p2pService: mockP2PService,
         databaseService: mockDatabaseService,
@@ -30,21 +37,30 @@ void main() {
 
     test('Initialize should start network services', () async {
       // Arrange
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
-
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => true);
+      when(mockP2PService.startAdvertising()).thenAnswer((_) async => true);
+      when(mockP2PService.startDiscovery()).thenAnswer((_) async => true);
+      
+      // Update state getters after calls (if logic checks them again)
+      // Usually viewmodels might re-check state, but let's assume it relies on return values first.
+      
       // Act
       await viewModel.initialize(mode: 'join');
 
       // Assert
       expect(viewModel.mode, equals('join'));
-      expect(mockP2PService.isInitialized, isTrue);
-      expect(mockP2PService.isAdvertising, isTrue);
-      expect(mockP2PService.isDiscovering, isTrue);
+      verify(mockP2PService.initialize(any)).called(1);
+      verify(mockP2PService.startAdvertising()).called(1);
+      verify(mockP2PService.startDiscovery()).called(1);
     });
 
     test('Successful initialization should set state to searching', () async {
       // Arrange
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => true);
+      when(mockP2PService.startAdvertising()).thenAnswer((_) async => true);
+      when(mockP2PService.startDiscovery()).thenAnswer((_) async => true);
 
       // Act
       await viewModel.initialize();
@@ -56,8 +72,8 @@ void main() {
 
     test('Failed initialization should set error state', () async {
       // Arrange
-      mockP2PService.initializeShouldFail = true;
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => false); // Fail init
 
       // Act
       await viewModel.initialize();
@@ -69,15 +85,22 @@ void main() {
 
     test('Refresh network should restart discovery', () async {
       // Arrange
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => true);
+      when(mockP2PService.startAdvertising()).thenAnswer((_) async => true);
+      when(mockP2PService.startDiscovery()).thenAnswer((_) async => true);
+      
       await viewModel.initialize();
+      
+      when(mockP2PService.stopDiscovery()).thenAnswer((_) async {});
 
       // Act
       await viewModel.refreshNetwork();
 
       // Assert
       expect(viewModel.isRefreshing, isFalse);
-      expect(mockP2PService.discoveryRestartCount, equals(1));
+      verify(mockP2PService.stopDiscovery()).called(1);
+      verify(mockP2PService.startDiscovery()).called(2); // 1 from init, 1 from refresh
     });
 
     test('Connected devices should reflect P2P service state', () async {
@@ -90,8 +113,16 @@ void main() {
         batteryLevel: 80,
         endpointId: 'endpoint1',
       );
-      mockP2PService.addConnectedDevice(device);
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
+      
+      // Setup methods
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => true);
+      when(mockP2PService.startAdvertising()).thenAnswer((_) async => true);
+      when(mockP2PService.startDiscovery()).thenAnswer((_) async => true);
+      
+      // When connectedDevices is accessed, return list with device
+      when(mockP2PService.connectedDevices).thenReturn([device]);
+      
       await viewModel.initialize();
 
       // Assert
@@ -101,19 +132,33 @@ void main() {
 
     test('Broadcast emergency should call P2P service', () async {
       // Arrange
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => true);
+      when(mockP2PService.startAdvertising()).thenAnswer((_) async => true);
+      when(mockP2PService.startDiscovery()).thenAnswer((_) async => true);
+      
       await viewModel.initialize();
+      
+      when(mockP2PService.broadcastEmergencyAlert(any)).thenAnswer((_) async {});
 
       // Act
       await viewModel.broadcastEmergency('Help needed!');
 
       // Assert
-      expect(mockP2PService.lastEmergencyAlert, equals('Help needed!'));
+      verify(mockP2PService.broadcastEmergencyAlert('Help needed!')).called(1);
     });
 
     test('isNetworkActive should be true when advertising and discovering', () async {
       // Arrange
-      mockDatabaseService.setUserProfile({'name': 'Test User'});
+      when(mockDatabaseService.getUserProfile()).thenAnswer((_) async => {'name': 'Test User'});
+      when(mockP2PService.initialize(any)).thenAnswer((_) async => true);
+      when(mockP2PService.startAdvertising()).thenAnswer((_) async => true);
+      when(mockP2PService.startDiscovery()).thenAnswer((_) async => true);
+      
+      // Update mock state to return true
+      when(mockP2PService.isAdvertising).thenReturn(true);
+      when(mockP2PService.isDiscovering).thenReturn(true);
+
       await viewModel.initialize();
 
       // Assert
