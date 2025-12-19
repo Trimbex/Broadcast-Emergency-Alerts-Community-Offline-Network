@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:flutter_application/main.dart' as app;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   group('App Initialization Integration Tests', () {
+    setUp(() async {
+       // Clear preferences to ensure fresh start between tests
+       final prefs = await SharedPreferences.getInstance();
+       await prefs.clear();
+    });
+
     testWidgets('App should launch and show identity setup', (WidgetTester tester) async {
       // Launch app
       app.main();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
 
       // Should show identity setup page with correct title
       expect(find.text('Set Up Your Identity'), findsOneWidget);
@@ -20,7 +27,7 @@ void main() {
     testWidgets('Can complete identity setup', (WidgetTester tester) async {
       // Launch app
       app.main();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
 
       // Find name field by its label text
       final nameField = find.ancestor(
@@ -30,13 +37,19 @@ void main() {
       
       if (nameField.evaluate().isNotEmpty) {
         await tester.enterText(nameField, 'Test User');
-        await tester.pumpAndSettle();
-
+        await tester.pump(const Duration(seconds: 2));
+   
         // Tap Save & Continue button  
         final saveButton = find.text('Save & Continue');
         if (saveButton.evaluate().isNotEmpty) {
+          // Hide keyboard
+          FocusManager.instance.primaryFocus?.unfocus();
+          await tester.pump(const Duration(seconds: 1));
+          
+          await tester.ensureVisible(saveButton);
           await tester.tap(saveButton);
-          await tester.pumpAndSettle(const Duration(seconds: 2));
+          // Use pump instead of pumpAndSettle because Landing Page has infinite animations (pulsing button)
+          await tester.pump(const Duration(seconds: 2));
 
           // Successfully navigated away from identity setup
         }
@@ -48,7 +61,7 @@ void main() {
     testWidgets('Can toggle theme', (WidgetTester tester) async {
       // Launch app
       app.main();
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
 
       // Find theme toggle button
       final themeToggle = find.byIcon(Icons.brightness_6);
@@ -59,7 +72,7 @@ void main() {
 
         // Toggle theme
         await tester.tap(themeToggle);
-        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 10)); // Use pump to avoid infinite animation hang
 
         // Theme should have changed
         final newBrightness = Theme.of(context).brightness;
