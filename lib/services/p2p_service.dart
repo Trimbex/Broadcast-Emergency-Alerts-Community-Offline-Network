@@ -29,6 +29,10 @@ class P2PService extends ChangeNotifier {
   // Test mode to bypass actual hardware/permissions
   bool _isTestMode = false;
   set isTestMode(bool value) => _isTestMode = value;
+  
+  // Allow real Nearby API calls even in test mode (for integration tests on real devices)
+  bool _shouldUseRealNearbyApi = false;
+  set shouldUseRealNearbyApi(bool value) => _shouldUseRealNearbyApi = value;
 
   // Service configuration
   static const String SERVICE_ID = 'com.beacon.emergency';
@@ -277,7 +281,7 @@ class P2PService extends ChangeNotifier {
     }
 
     try {
-      if (!_isTestMode) {
+      if (!_isTestMode || _shouldUseRealNearbyApi) {
         await Nearby().startAdvertising(
           _localDeviceName!,
           STRATEGY,
@@ -308,7 +312,7 @@ class P2PService extends ChangeNotifier {
     }
 
     try {
-      if (!_isTestMode) {
+      if (!_isTestMode || _shouldUseRealNearbyApi) {
         await Nearby().startDiscovery(
           _localDeviceName!,
           STRATEGY,
@@ -332,7 +336,7 @@ class P2PService extends ChangeNotifier {
 
   /// Stop advertising
   Future<void> stopAdvertising() async {
-    if (!_isTestMode) {
+    if (!_isTestMode || _shouldUseRealNearbyApi) {
       await Nearby().stopAdvertising();
     }
     _isAdvertising = false;
@@ -342,7 +346,7 @@ class P2PService extends ChangeNotifier {
 
   /// Stop discovery
   Future<void> stopDiscovery() async {
-    if (!_isTestMode) {
+    if (!_isTestMode || _shouldUseRealNearbyApi) {
       await Nearby().stopDiscovery();
     }
     _isDiscovering = false;
@@ -352,7 +356,7 @@ class P2PService extends ChangeNotifier {
 
   /// Stop all P2P operations
   Future<void> stopAll() async {
-    if (!_isTestMode) {
+    if (!_isTestMode || _shouldUseRealNearbyApi) {
       await Nearby().stopAllEndpoints();
     }
     _isAdvertising = false;
