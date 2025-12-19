@@ -27,11 +27,13 @@ class _IdentitySetupPageState extends State<IdentitySetupPage> {
     final userProfile = await DatabaseService.instance.getUserProfile();
     if (userProfile != null && userProfile['name'] != null) {
       // Automatically go to landing page
-      if (mounted) {
-        Future.delayed(Duration.zero, () {
-          Navigator.pushReplacementNamed(context, '/landing');
-        });
-      }
+        if (mounted) {
+          Future.delayed(Duration.zero, () {
+            if (mounted) {
+              Navigator.pushReplacementNamed(context, '/landing');
+            }
+          });
+        }
     }
   }
 

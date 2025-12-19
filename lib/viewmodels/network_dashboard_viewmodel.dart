@@ -1,4 +1,3 @@
-import '../services/p2p_service.dart';
 import '../services/database_service.dart';
 import '../models/device_model.dart';
 import 'base_viewmodel.dart';
@@ -14,12 +13,12 @@ enum NetworkState {
 /// ViewModel for NetworkDashboard
 /// Manages network discovery, device connections, and network state
 class NetworkDashboardViewModel extends BaseViewModel {
-  final P2PService _p2pService;
-  final DatabaseService _databaseService;
+  final dynamic _p2pService;
+  final dynamic _databaseService;
 
   NetworkDashboardViewModel({
-    required P2PService p2pService,
-    DatabaseService? databaseService,
+    required dynamic p2pService,
+    dynamic databaseService,
   })  : _p2pService = p2pService,
         _databaseService = databaseService ?? DatabaseService.instance;
 

@@ -150,22 +150,24 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         Expanded(
           child: filteredResources.isEmpty
               ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inventory_2_outlined, size: 64, color: BeaconColors.textSecondary(context)),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No resources available',
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Tap the people icon to request resources from connected devices',
-                        style: Theme.of(context).textTheme.bodySmall,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 64, color: BeaconColors.textSecondary(context)),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No resources available',
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Tap the people icon to request resources from connected devices',
+                          style: Theme.of(context).textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 )
               : ListView.builder(

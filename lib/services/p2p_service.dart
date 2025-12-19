@@ -26,6 +26,10 @@ class P2PService extends ChangeNotifier {
   factory P2PService() => _instance;
   P2PService._internal();
 
+  // Test mode to bypass actual hardware/permissions
+  bool _isTestMode = false;
+  set isTestMode(bool value) => _isTestMode = value;
+
   // Service configuration
   static const String SERVICE_ID = 'com.beacon.emergency';
   static const Strategy STRATEGY = Strategy.P2P_CLUSTER; // Multi-device mesh
@@ -43,10 +47,10 @@ class P2PService extends ChangeNotifier {
 
   // Resource cache - stores all resources from all devices
   final Map<String, ResourceModel> _networkResources = {}; // Key: resourceId_deviceId
-  final StreamController<ResourceModel> _resourceStreamController = StreamController<ResourceModel>.broadcast();
+  StreamController<ResourceModel>? _resourceStreamController = StreamController<ResourceModel>.broadcast();
   
   // Resource request notifications
-  final StreamController<Map<String, dynamic>> _resourceRequestStreamController = StreamController<Map<String, dynamic>>.broadcast();
+  StreamController<Map<String, dynamic>>? _resourceRequestStreamController = StreamController<Map<String, dynamic>>.broadcast();
 
   
   // Connection state
@@ -65,11 +69,59 @@ class P2PService extends ChangeNotifier {
   String? get localDeviceName => _localDeviceName;
   int get batteryLevel => _batteryLevel;
   List<ResourceModel> get networkResources => _networkResources.values.toList();
-  Stream<ResourceModel> get resourceStream => _resourceStreamController.stream;
-  Stream<Map<String, dynamic>> get resourceRequestStream => _resourceRequestStreamController.stream;
+  Stream<ResourceModel> get resourceStream => _resourceStreamController?.stream ?? const Stream.empty();
+  Stream<Map<String, dynamic>> get resourceRequestStream => _resourceRequestStreamController?.stream ?? const Stream.empty();
+
+  // Disposal tracking
+  bool _isDisposed = false;
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    
+    // Stop services without calling notifyListeners
+    if (!_isTestMode) {
+      Nearby().stopAllEndpoints();
+    }
+    _isAdvertising = false;
+    _isDiscovering = false;
+    _connectedDevices.clear();
+    
+    // Close all streams
+    _resourceStreamController?.close();
+    _resourceRequestStreamController?.close();
+    _resourceStreamController = null;
+    _resourceRequestStreamController = null;
+    for (var controller in _messageStreams.values) {
+      controller.close();
+    }
+    _messageStreams.clear();
+    
+    // We DO NOT call super.dispose() because this is a Singleton.
+    // Calling super.dispose() would prevent the P2PService from ever being used again,
+    // which breaks integration tests that restart the app but keep the Dart isolate alive.
+    // super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_isDisposed) {
+      super.notifyListeners();
+    }
+  }
 
   /// Initialize the P2P service
   Future<bool> initialize(String userName) async {
+    // Reset disposed flag to allow reuse (important for integration tests)
+    _isDisposed = false;
+    // Ensure stream controllers are available (recreate if previously disposed)
+    if (_resourceStreamController == null || _resourceStreamController!.isClosed) {
+      _resourceStreamController = StreamController<ResourceModel>.broadcast();
+    }
+    if (_resourceRequestStreamController == null || _resourceRequestStreamController!.isClosed) {
+      _resourceRequestStreamController = StreamController<Map<String, dynamic>>.broadcast();
+    }
+    
     _localDeviceName = userName;
     
     // Load identity from database to ensure consistent device ID
@@ -163,8 +215,12 @@ class P2PService extends ChangeNotifier {
   }
 
   /// Request necessary permissions for P2P communication
-
-Future<bool> _requestPermissions() async {
+  Future<bool> _requestPermissions() async {
+    // Bypass for tests
+    if (_isTestMode) {
+      debugPrint('🧪 P2P: Test mode - simulating permissions granted');
+      return true;
+    }
   List<Permission> permissions = [
     Permission.bluetooth,
     Permission.bluetoothAdvertise,
@@ -221,14 +277,18 @@ Future<bool> _requestPermissions() async {
     }
 
     try {
-      await Nearby().startAdvertising(
-        _localDeviceName!,
-        STRATEGY,
-        onConnectionInitiated: _onConnectionInitiated,
-        onConnectionResult: _onConnectionResult,
-        onDisconnected: _onDisconnected,
-        serviceId: SERVICE_ID,
-      );
+      if (!_isTestMode) {
+        await Nearby().startAdvertising(
+          _localDeviceName!,
+          STRATEGY,
+          onConnectionInitiated: _onConnectionInitiated,
+          onConnectionResult: _onConnectionResult,
+          onDisconnected: _onDisconnected,
+          serviceId: SERVICE_ID,
+        );
+      } else {
+         debugPrint('🧪 P2P: Test mode - simulating advertising started');
+      }
 
       _isAdvertising = true;
       notifyListeners();
@@ -248,13 +308,17 @@ Future<bool> _requestPermissions() async {
     }
 
     try {
-      await Nearby().startDiscovery(
-        _localDeviceName!,
-        STRATEGY,
-        onEndpointFound: _onEndpointFound,
-        onEndpointLost: _onEndpointLost,
-        serviceId: SERVICE_ID,
-      );
+      if (!_isTestMode) {
+        await Nearby().startDiscovery(
+          _localDeviceName!,
+          STRATEGY,
+          onEndpointFound: _onEndpointFound,
+          onEndpointLost: _onEndpointLost,
+          serviceId: SERVICE_ID,
+        );
+      } else {
+        debugPrint('🧪 P2P: Test mode - simulating discovery started');
+      }
 
       _isDiscovering = true;
       notifyListeners();
@@ -268,7 +332,9 @@ Future<bool> _requestPermissions() async {
 
   /// Stop advertising
   Future<void> stopAdvertising() async {
-    await Nearby().stopAdvertising();
+    if (!_isTestMode) {
+      await Nearby().stopAdvertising();
+    }
     _isAdvertising = false;
     notifyListeners();
     debugPrint('🛑 P2P: Stopped advertising');
@@ -276,7 +342,9 @@ Future<bool> _requestPermissions() async {
 
   /// Stop discovery
   Future<void> stopDiscovery() async {
-    await Nearby().stopDiscovery();
+    if (!_isTestMode) {
+      await Nearby().stopDiscovery();
+    }
     _isDiscovering = false;
     notifyListeners();
     debugPrint('🛑 P2P: Stopped discovery');
@@ -284,7 +352,9 @@ Future<bool> _requestPermissions() async {
 
   /// Stop all P2P operations
   Future<void> stopAll() async {
-    await Nearby().stopAllEndpoints();
+    if (!_isTestMode) {
+      await Nearby().stopAllEndpoints();
+    }
     _isAdvertising = false;
     _isDiscovering = false;
     _connectedDevices.clear();
@@ -811,7 +881,7 @@ Future<bool> _requestPermissions() async {
       await DatabaseService.instance.saveUserResource(resourceWithDevice);
     }
 
-    _resourceStreamController.add(resourceWithDevice);
+    _resourceStreamController?.add(resourceWithDevice);
     notifyListeners();
 
     // Broadcast to all connected devices
@@ -877,7 +947,7 @@ Future<bool> _requestPermissions() async {
       // Only add if not already exists (avoid duplicates)
       if (!_networkResources.containsKey(resourceKey)) {
         _networkResources[resourceKey] = resourceWithDevice;
-        _resourceStreamController.add(resourceWithDevice);
+        _resourceStreamController?.add(resourceWithDevice);
         notifyListeners();
         debugPrint('📦 P2P: Received resource: ${resource.name} from $endpointId');
       }
@@ -940,7 +1010,7 @@ Future<bool> _requestPermissions() async {
         // Only add if not already exists
         if (!_networkResources.containsKey(resourceKey)) {
           _networkResources[resourceKey] = resourceWithDevice;
-          _resourceStreamController.add(resourceWithDevice);
+          _resourceStreamController?.add(resourceWithDevice);
           addedCount++;
         }
       }
@@ -1011,7 +1081,8 @@ Future<bool> _requestPermissions() async {
       );
       
       // Notify UI about the request
-      _resourceRequestStreamController.add({
+      // Notify UI about the request
+      _resourceRequestStreamController?.add({
         'resourceId': resourceId,
         'resource': resource,
         'requestedQuantity': requestedQuantity,
@@ -1067,7 +1138,7 @@ Future<bool> _requestPermissions() async {
                 : 'Provided to: $requesterName (Qty: $quantity)',
           );
           _networkResources[entry.key] = updatedResource;
-          _resourceStreamController.add(updatedResource);
+          _resourceStreamController?.add(updatedResource);
           notifyListeners();
           debugPrint('✅ P2P: Resource request approved - ${updatedResource.name} updated');
           break;
@@ -1123,7 +1194,7 @@ Future<bool> _requestPermissions() async {
       // Update in database
       DatabaseService.instance.saveUserResource(updatedResource);
       
-      _resourceStreamController.add(updatedResource);
+      _resourceStreamController?.add(updatedResource);
       notifyListeners();
       
       // Broadcast updated resource to all devices
@@ -1136,18 +1207,5 @@ Future<bool> _requestPermissions() async {
       
       debugPrint('✅ P2P: Updated resource ${resource.name} after approval');
     }
-  }
-
-  /// Dispose resources
-  @override
-  void dispose() {
-    stopAll();
-    for (var stream in _messageStreams.values) {
-      stream.close();
-    }
-    _messageStreams.clear();
-    _resourceStreamController.close();
-    _resourceRequestStreamController.close();
-    super.dispose();
   }
 }
