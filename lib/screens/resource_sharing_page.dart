@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../widgets/common/theme_toggle_button.dart';
@@ -17,6 +18,8 @@ class ResourceSharingPage extends StatefulWidget {
 
 class _ResourceSharingPageState extends State<ResourceSharingPage> {
   ResourceSharingViewModel? _viewModel;
+  StreamSubscription<Map<String, dynamic>>? _resourceRequestSubscription;
+  bool _isDialogShowing = false;
 
   @override
   void initState() {
@@ -24,10 +27,24 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
     final p2pService = Provider.of<P2PService>(context, listen: false);
     _viewModel = ResourceSharingViewModel(p2pService: p2pService);
     _viewModel!.initialize();
+    
+    // Set up stream subscription after viewModel is initialized
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _viewModel != null) {
+        _resourceRequestSubscription = _viewModel!.resourceRequestStream.listen(
+          (requestData) {
+            if (mounted && !_isDialogShowing) {
+              _showResourceRequestDialog(requestData);
+            }
+          },
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
+    _resourceRequestSubscription?.cancel();
     _viewModel?.dispose();
     super.dispose();
   }
@@ -52,13 +69,6 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
         ),
         body: Consumer2<ResourceSharingViewModel, P2PService>(
           builder: (context, viewModel, p2pService, child) {
-            // Listen to resource requests
-            viewModel.resourceRequestStream.listen((requestData) {
-              if (mounted) {
-                _showResourceRequestDialog(requestData);
-              }
-            });
-
             return _buildResourcesView(viewModel, p2pService, viewModel.filteredResources);
           },
         ),
@@ -353,11 +363,18 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
   }
 
   void _showResourceRequestDialog(Map<String, dynamic> requestData) {
+    // Prevent multiple dialogs from showing at once
+    if (_isDialogShowing) {
+      return;
+    }
+    
     final resource = requestData['resource'] as ResourceModel;
     final requestedQuantity = requestData['requestedQuantity'] as int;
     final requesterName = requestData['requesterName'] as String;
     final endpointId = requestData['endpointId'] as String;
     final resourceId = requestData['resourceId'] as String;
+    
+    _isDialogShowing = true;
     
     showDialog(
       context: context,
@@ -371,7 +388,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
             Text('$requesterName is requesting:'),
             const SizedBox(height: 8),
             Text(
-              '${resource.name}',
+              resource.name,
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 4),
@@ -384,6 +401,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
+              _isDialogShowing = false;
               final p2pService = Provider.of<P2PService>(context, listen: false);
               p2pService.respondToResourceRequest(endpointId, resourceId, false, 0, requesterName);
               
@@ -399,6 +417,7 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
+              _isDialogShowing = false;
               final p2pService = Provider.of<P2PService>(context, listen: false);
               
               // Update resource
@@ -421,7 +440,10 @@ class _ResourceSharingPageState extends State<ResourceSharingPage> {
           ),
         ],
       ),
-    );
+    ).then((_) {
+      // Reset flag when dialog is dismissed (even if dismissed by other means)
+      _isDialogShowing = false;
+    });
   }
 
   void _showAddResourceDialog() {
