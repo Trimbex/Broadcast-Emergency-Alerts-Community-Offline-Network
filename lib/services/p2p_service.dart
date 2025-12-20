@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:nearby_connections/nearby_connections.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:battery_plus/battery_plus.dart';
+import 'package:geolocator/geolocator.dart'; // Required to open System Location Settings
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 import '../models/resource_model.dart';
@@ -249,16 +250,57 @@ class P2PService extends ChangeNotifier {
 
   Map<Permission, PermissionStatus> statuses = await permissions.request();
 
-  bool allGranted = statuses.values.every(
-    (status) => status.isGranted || status.isLimited,
-  );
+    // Check statuses
+    bool allGranted = true;
+    
+    // Explicitly check crucial location permission with retry to fix race condition
+    if (await Permission.location.isDenied) {
+      debugPrint('⚠️ P2P: Location permission initially denied. Re-verifying...');
+      // Wait a moment for OS to update state
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (await Permission.location.status.isDenied) {
+        debugPrint('❌ P2P: Location permission still denied/unavailable.');
+        allGranted = false;
+      } else {
+        debugPrint('✅ P2P: Location permission verified granted.');
+      }
+    }
 
-  if (!allGranted) {
-    debugPrint('❌ P2P: Some permissions denied: $statuses');
+    statuses.forEach((permission, status) {
+      if (!status.isGranted) {
+        debugPrint('❌ P2P: Permission $permission not granted (status: $status)');
+        allGranted = false;
+      }
+    });
+
+    if (allGranted) {
+       // 1. Double check permission to ensure Nearby sees it
+       await Future.delayed(const Duration(milliseconds: 500));
+
+       // 2. CRITICAL: Check if the actual GPS Hardware Switch is ON
+       // The Nearby plugin crashes/fails if GPS is off, but cannot turn it on itself.
+       // We use Geolocator specifically to trigger the "Turn on Location" system dialog.
+       bool locationServiceEnabled = await Geolocator.isLocationServiceEnabled();
+       if (!locationServiceEnabled) {
+         debugPrint('⚠️ P2P: Permissions granted, but GPS Hardware is OFF. Opening settings...');
+         // Opens the system menu so user can toggle it
+         await Geolocator.openLocationSettings();
+         
+         // Wait for user to come back from settings
+         await Future.delayed(const Duration(seconds: 3));
+         
+         // Verify again
+         if (!await Geolocator.isLocationServiceEnabled()) {
+           debugPrint('❌ P2P: User did not turn on GPS. Discovery will likely fail.');
+           return false;
+         }
+       }
+
+       return true;
+    }
+    
+    return allGranted;
   }
-
-  return allGranted;
-}
 
   /// Start battery level monitoring
   void _startBatteryMonitoring() {
