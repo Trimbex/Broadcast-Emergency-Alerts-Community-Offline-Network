@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:geolocator/geolocator.dart';
 import '../models/device_model.dart';
 import '../models/message_model.dart';
 import '../services/database_service.dart';
@@ -136,6 +137,17 @@ class ChatViewModel extends BaseViewModel {
     try {
       if (isEmergency) {
         await _p2pService.broadcastEmergencyAlert(message);
+      } else if (message == '📍 Location') {
+        // Handle Location Sharing
+        final position = await _getCurrentLocation();
+        if (position != null) {
+          final locationMsg = '📍 Location: ${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)}';
+          // Send as normal message for now, encrypted by P2PService
+          await _p2pService.sendMessage(_device!.endpointId!, locationMsg);
+        } else {
+          // Fallback if permission denied or error
+          await _p2pService.sendMessage(_device!.endpointId!, '📍 Could not fetch location');
+        }
       } else {
         await _p2pService.sendMessage(_device!.endpointId!, message);
       }
@@ -151,6 +163,32 @@ class ChatViewModel extends BaseViewModel {
   /// Refresh messages from database
   Future<void> refreshMessages() async {
     await _loadMessagesFromDatabase();
+  }
+
+  /// Get current location
+  Future<Position?> _getCurrentLocation() async {
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          setError('Location permissions are denied');
+          return null;
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        setError('Location permissions are permanently denied');
+        return null;
+      }
+
+      return await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+    } catch (e) {
+      setError('Error getting location: $e');
+      return null;
+    }
   }
 
   @override
