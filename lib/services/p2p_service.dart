@@ -12,7 +12,9 @@ import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'database_service.dart';
 import 'notification_service.dart';
+import 'notification_service.dart';
 import 'speech_service.dart';
+import 'encryption_service.dart';
 
 /// P2P Communication Service using Nearby Connections API
 /// 
@@ -521,7 +523,7 @@ class P2PService extends ChangeNotifier {
       'type': 'message',
       'senderId': _localDeviceId,
       'senderName': _localDeviceName,
-      'text': message,
+      'text': EncryptionService.instance.encrypt(message),
       'timestamp': DateTime.now().toIso8601String(),
     };
     
@@ -559,7 +561,7 @@ class P2PService extends ChangeNotifier {
       'type': 'emergency',
       'senderId': _localDeviceId,
       'senderName': _localDeviceName,
-      'alert': alertMessage,
+      'alert': EncryptionService.instance.encrypt(alertMessage), // Encrypt alert
       'timestamp': DateTime.now().toIso8601String(),
     };
     
@@ -687,7 +689,8 @@ class P2PService extends ChangeNotifier {
     final message = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       senderId: senderId,
-      text: data['text'] ?? '',
+      // Attempt decrypt, if fail (legacy msg), it returns original
+      text: EncryptionService.instance.decrypt(data['text'] ?? ''),
       timestamp: DateTime.parse(data['timestamp'] ?? DateTime.now().toIso8601String()),
       isMe: false,
       senderName: data['senderName'],
@@ -818,7 +821,8 @@ class P2PService extends ChangeNotifier {
     debugPrint('🚨 EMERGENCY ALERT from ${data['senderName']}: ${data['alert']}');
     
     final senderId = data['senderId'] ?? endpointId;
-    final alertText = data['alert'] ?? '';
+    // Decrypt alert text
+    final alertText = EncryptionService.instance.decrypt(data['alert'] ?? '');
     // Create emergency message
     final message = MessageModel(
       id: DateTime.now().millisecondsSinceEpoch.toString(),

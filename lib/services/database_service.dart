@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/message_model.dart';
 import '../models/resource_model.dart';
+import 'encryption_service.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
@@ -146,9 +147,9 @@ class DatabaseService {
     final data = {
       'name': name,
       'role': role ?? '',
-      'phone': phone ?? '',
-      'blood_type': bloodType ?? '',
-      'medical_conditions': medicalConditions ?? '',
+      'phone': phone != null ? EncryptionService.instance.encrypt(phone) : '',
+      'blood_type': bloodType != null ? EncryptionService.instance.encrypt(bloodType) : '',
+      'medical_conditions': medicalConditions != null ? EncryptionService.instance.encrypt(medicalConditions) : '',
       'device_id': deviceId,
       'updated_at': now,
     };
@@ -170,7 +171,12 @@ class DatabaseService {
     final db = await instance.database;
     final result = await db.query('user_profile');
     if (result.isNotEmpty) {
-      return result.first;
+      final profile = Map<String, dynamic>.from(result.first);
+      // Decrypt sensitive fields
+      if (profile['phone'] != null) profile['phone'] = EncryptionService.instance.decrypt(profile['phone']);
+      if (profile['blood_type'] != null) profile['blood_type'] = EncryptionService.instance.decrypt(profile['blood_type']);
+      if (profile['medical_conditions'] != null) profile['medical_conditions'] = EncryptionService.instance.decrypt(profile['medical_conditions']);
+      return profile;
     }
     return null;
   }
@@ -189,7 +195,7 @@ class DatabaseService {
     await db.insert('emergency_contacts', {
       'name': name,
       'relation': relation,
-      'phone': phone,
+      'phone': EncryptionService.instance.encrypt(phone),
       'device_id': deviceId,
       'created_at': now,
       'updated_at': now,
@@ -204,7 +210,11 @@ class DatabaseService {
       whereArgs: [deviceId],
       orderBy: 'created_at ASC',
     );
-    return result;
+    return result.map((contact) {
+      final decrypted = Map<String, dynamic>.from(contact);
+      if (decrypted['phone'] != null) decrypted['phone'] = EncryptionService.instance.decrypt(decrypted['phone']);
+      return decrypted;
+    }).toList();
   }
 
   Future<void> updateEmergencyContact({
@@ -221,7 +231,7 @@ class DatabaseService {
       {
         'name': name,
         'relation': relation,
-        'phone': phone,
+        'phone': EncryptionService.instance.encrypt(phone),
         'updated_at': now,
       },
       where: 'id = ?',
@@ -249,7 +259,7 @@ class DatabaseService {
         'conversation_id': conversationId,
         'sender_id': message.senderId,
         'sender_name': message.senderName,
-        'text': message.text,
+        'text': EncryptionService.instance.encrypt(message.text),
         'timestamp': message.timestamp.millisecondsSinceEpoch,
         'is_me': message.isMe ? 1 : 0,
         'is_emergency': message.isEmergency ? 1 : 0,
@@ -272,7 +282,7 @@ class DatabaseService {
     return result.map((json) => MessageModel(
       id: json['id'] as String,
       senderId: json['sender_id'] as String,
-      text: json['text'] as String,
+      text: EncryptionService.instance.decrypt(json['text'] as String),
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] as int),
       isMe: (json['is_me'] as int) == 1,
       senderName: json['sender_name'] as String?,

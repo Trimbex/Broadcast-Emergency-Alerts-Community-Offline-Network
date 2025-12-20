@@ -55,7 +55,7 @@ class NetworkDashboardViewModel extends BaseViewModel {
         return;
       }
 
-      // Start advertising and discovery
+      // Start advertising and discovery at the same time (mesh network)
       final advertisingSuccess = await _p2pService.startAdvertising();
       final discoverySuccess = await _p2pService.startDiscovery();
 
