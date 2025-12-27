@@ -17,9 +17,9 @@ BEACON allows users to discover nearby devices, share text messages, and coordin
 
 | Dashboard | Resource Sharing | Chat Interface |
 |:---:|:---:|:---:|
-| ![Dashboard UI Placeholder](path/to/dashboard_screenshot.png) | ![Resource Map Placeholder](path/to/resources_screenshot.png) | ![Chat UI Placeholder](path/to/chat_screenshot.png) |
+| ![Dashboard UI Placeholder](images\dashboard.jpeg) | ![Resource Map Placeholder](images\resource.jpeg) | ![Chat UI Placeholder](images\chatpage.jpeg) |
 
-*(Placeholders for UI screenshots - please replace with actual screen captures)*
+
 
 ## Setup Details
 
